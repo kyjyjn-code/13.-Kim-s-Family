@@ -336,11 +336,17 @@ button { font-family: inherit; cursor: pointer; }
 .cal-summary { margin-bottom: 16px; }
 .cal-summary__title { font-size: 14px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
 .cal-summary__empty { font-size: 13px; color: var(--text-soft); padding: 6px 2px; }
-.cal-table__wrap { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.cal-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.cal-table td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.cal-table__wrap { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; }
+.cal-table { width: 100%; border-collapse: collapse; font-size: 13.5px; background: #fff; }
+.cal-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .cal-table tr:last-child td { border-bottom: none; }
-.ct-day { white-space: nowrap; color: var(--text-soft); font-weight: 700; width: 44px; }
+.ct-day { white-space: nowrap; color: #111; font-weight: 800; width: 44px; }
+.ct-title { color: #1f2328; font-weight: 600; }
+.ct-dday { white-space: nowrap; font-weight: 800; font-size: 12px; }
+.ct-dday.dd-future { color: #e0342b; }
+.ct-dday.dd-past { color: #2f6d92; }
+.ct-dday.dd-today { color: #e0342b; }
+.ct-ddaycell { text-align: right; white-space: nowrap; width: 52px; }
 .cr-date { white-space: nowrap; color: var(--text-soft); font-weight: 600; }
 .ct-kind { font-size: 11px; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
 .ct-sched { background: color-mix(in srgb, var(--accent-2) 20%, var(--surface)); color: var(--accent2-ink); }

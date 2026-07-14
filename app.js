@@ -495,10 +495,17 @@
       (recByDay[d] || []).forEach((r) => rows.push({ d, kind: "기념일", emoji: "🎂", title: r.title }));
       (evByDay[d] || []).forEach((e) => rows.push({ d, kind: "기록", emoji: catMeta(catOf(e.category)).emoji, title: e.title }));
     }
+    const tMid = new Date(); tMid.setHours(0, 0, 0, 0);
+    const dday = (d) => {
+      const diff = Math.round((new Date(y, m - 1, d).setHours(0, 0, 0, 0) - tMid) / 86400000);
+      if (diff > 0) return `<span class="ct-dday dd-future">D-${diff}</span>`;
+      if (diff < 0) return `<span class="ct-dday dd-past">D+${-diff}</span>`;
+      return `<span class="ct-dday dd-today">D-DAY</span>`;
+    };
     $("#cal-summary").innerHTML = rows.length
       ? `<div class="cal-summary__title">📋 ${y}년 ${m}월 · 총 ${rows.length}건</div>
          <div class="cal-table__wrap"><table class="cal-table"><tbody>${rows.map((r) =>
-           `<tr><td class="ct-day">${r.d}일</td><td><span class="ct-kind ${({ "일정": "ct-sched", "기념일": "ct-anniv", "기록": "ct-memo" })[r.kind]}">${r.kind}</span></td><td>${r.emoji} ${esc(r.title)}</td></tr>`).join("")}</tbody></table></div>`
+           `<tr><td class="ct-day">${r.d}일</td><td><span class="ct-kind ${({ "일정": "ct-sched", "기념일": "ct-anniv", "기록": "ct-memo" })[r.kind]}">${r.kind}</span></td><td class="ct-title">${r.emoji} ${esc(r.title)}</td><td class="ct-ddaycell">${dday(r.d)}</td></tr>`).join("")}</tbody></table></div>`
       : `<div class="cal-summary__empty">${y}년 ${m}월엔 일정이 없어요.</div>`;
 
     const grid = $("#cal-grid"); grid.innerHTML = "";
