@@ -268,23 +268,18 @@
     state.formItems.forEach((it, i) => {
       const pv = document.createElement("div");
       pv.className = "pv" + (i === 0 ? " is-cover" : "");
-      const cropBtn = it.type === "new" ? `<button type="button" class="pv__crop">✂️영역</button>` : "";
       pv.innerHTML = `
         ${i === 0 ? '<span class="pv__badge">대표</span>' : ""}
         <img src="${it.url || ""}" alt="">
         <div class="pv__btns">
           <button type="button" class="${i === 0 ? "pv__cover" : ""}">${i === 0 ? "대표✓" : "대표로"}</button>
-          ${cropBtn}
+          <button type="button" class="pv__crop">✂️영역</button>
           <button type="button">제거</button>
         </div>`;
       const btns = pv.querySelectorAll("button");
       btns[0].onclick = () => { const [m] = state.formItems.splice(i, 1); state.formItems.unshift(m); renderPhotoPreview(); };
-      if (it.type === "new") {
-        btns[1].onclick = () => openCrop(i);
-        btns[2].onclick = () => { state.formItems.splice(i, 1); renderPhotoPreview(); };
-      } else {
-        btns[1].onclick = () => { state.formItems.splice(i, 1); renderPhotoPreview(); };
-      }
+      btns[1].onclick = () => openCrop(i);
+      btns[2].onclick = () => { state.formItems.splice(i, 1); renderPhotoPreview(); };
       box.appendChild(pv);
     });
   }
@@ -686,13 +681,21 @@
 
   /* ---------- 썸네일 크롭(영역 지정) ---------- */
   let cropIndex = -1, cropBox = { x: 0, y: 0, size: 0 }, cropDrag = null;
-  function openCrop(index) {
+  async function openCrop(index) {
     const it = state.formItems[index];
-    if (!it || it.type !== "new") return;
+    if (!it) return;
     cropIndex = index;
     const img = $("#crop-img");
     img.onload = () => initCropBox();
-    img.src = URL.createObjectURL(it.file);
+    img.onerror = () => { toast("사진을 불러오지 못했어요"); closeCrop(); };
+    img.crossOrigin = "anonymous";  // 캔버스로 잘라내려면 CORS 필요(기존 사진)
+    if (it.type === "new") {
+      img.src = URL.createObjectURL(it.file);
+    } else {
+      const url = await signOne(it.key);
+      if (!url) { toast("사진을 불러오지 못했어요"); return; }
+      img.src = url;
+    }
     $("#crop-modal").hidden = false; document.body.style.overflow = "hidden";
   }
   function closeCrop() {
@@ -742,10 +745,29 @@
     if (cropIndex < 0) return;
     const it = state.formItems[cropIndex], img = $("#crop-img");
     const scale = img.naturalWidth / img.clientWidth;
-    it.crop = { sx: Math.round(cropBox.x * scale), sy: Math.round(cropBox.y * scale), size: Math.round(cropBox.size * scale) };
-    const cv = await cropCanvas(it.file, it.crop, 200);
-    if (cv) it.url = cv.toDataURL("image/jpeg", 0.8);
-    closeCrop(); renderPhotoPreview(); toast("썸네일 영역을 지정했어요 ✂️");
+    const crop = { sx: Math.round(cropBox.x * scale), sy: Math.round(cropBox.y * scale), size: Math.round(cropBox.size * scale) };
+    if (it.type === "new") {
+      it.crop = crop;
+      const cv = await cropCanvas(it.file, crop, 200);
+      if (cv) it.url = cv.toDataURL("image/jpeg", 0.8);
+      closeCrop(); renderPhotoPreview(); toast("썸네일 영역을 지정했어요 ✂️");
+      return;
+    }
+    // 기존 사진: 표시된 이미지에서 잘라 썸네일만 새로 업로드 (원본 유지)
+    try {
+      const P = CFG.photo || {}, edge = P.thumbEdge || 360;
+      const cv = document.createElement("canvas"); cv.width = edge; cv.height = edge;
+      cv.getContext("2d").drawImage(img, crop.sx, crop.sy, crop.size, crop.size, 0, 0, edge, edge);
+      const blob = await canvasToBlob(cv, P.thumbQuality || 0.72);
+      const tkey = thumbKey(it.key);
+      const { error } = await sb.storage.from(BUCKET).upload(tkey, blob, { contentType: "image/jpeg", upsert: true });
+      if (error) throw error;
+      const fresh = await signOne(tkey);
+      it.url = fresh; state.thumbUrls[tkey] = fresh;
+      closeCrop(); renderPhotoPreview(); applyFilters(); toast("썸네일을 다시 잘랐어요 ✂️");
+    } catch (e) {
+      console.error(e); alert("썸네일 저장 실패: " + (e.message || e));
+    }
   }
 
   /* ---------- 엑셀 백업 다운로드 ---------- */
