@@ -1,0 +1,29 @@
+# ── 공개 저장소에 올라가면 안 되는 로컬 전용/비공개 파일 ──
+# (이제 데이터는 Supabase에 있으므로, 웹에는 아래 5개만 배포됨:
+#  index.html, style.css, app.js, config.js, README.md)
+
+# 옛 데이터/백업 (가족 실제 정보 포함 → 비공개)
+events.xlsx
+events_백업_*.xlsx
+사진연대기_초안.xlsx
+data/
+photos/
+
+# 개발/변환 도구 (웹에 불필요)
+build.py
+deploy.bat
+preview.bat
+__pycache__/
+*.pyc
+
+# Supabase 스키마·시드 SQL (가족 정보 포함 → 비공개)
+supabase/
+
+# 업무지시서 등 문서
+가족연대기_업무지시서.md
+
+# 잡동사니
+~$*.xlsx
+Thumbs.db
+.DS_Store
+desktop.ini

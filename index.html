@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <title>우리 가족 연대기</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- 로그인 화면 -->
+  <div id="login" class="gate" hidden>
+    <form id="login-form" class="gate__box" autocomplete="on">
+      <h1 class="gate__title">김영진 💛 구경림 가족 일기</h1>
+      <p class="gate__desc">하나님을 사랑하는 우리 가족의 기록<br>가족만 로그인해서 볼 수 있어요.</p>
+      <input id="login-email" class="gate__input" type="email" placeholder="이메일"
+             aria-label="이메일" autocomplete="username" required />
+      <input id="login-pw" class="gate__input" type="password" placeholder="비밀번호"
+             aria-label="비밀번호" autocomplete="current-password" required />
+      <button class="gate__btn" type="submit" id="login-btn">들어가기</button>
+      <p id="login-error" class="gate__error" role="alert" hidden></p>
+    </form>
+  </div>
+
+  <!-- 본문 -->
+  <div id="app" class="app" hidden>
+    <div class="topbar">
+      <div class="topbar__box">
+        <div class="topbar__greet">
+          <div>하나님의 존귀한 자녀 <b id="user-name">-</b>님 환영합니다</div>
+          <div>예수님과 함께 행복한 하루 되세요~</div>
+        </div>
+        <div class="topbar__btns">
+          <button id="export-btn" class="logout-btn" type="button">⬇️ 엑셀 백업</button>
+          <button id="logout-btn" class="logout-btn" type="button">🔓 로그아웃</button>
+        </div>
+      </div>
+    </div>
+    <header class="header">
+      <h1 id="site-title" class="header__title">김영진 💛 구경림 가족 일기</h1>
+      <p id="site-subtitle" class="header__subtitle"></p>
+      <div class="header__counters">
+        <div id="counters3" class="counters3"></div>
+        <div class="counter__total">기록된 순간 <b id="event-count">–</b>개</div>
+      </div>
+    </header>
+
+    <div class="viewtabs">
+      <button id="tab-timeline" class="viewtab is-active" type="button">📜 타임라인</button>
+      <button id="tab-calendar" class="viewtab" type="button">🗓️ 캘린더</button>
+    </div>
+
+    <nav id="filters" class="filters" aria-label="필터">
+      <div class="filters__row filters__row--search">
+        <input id="filter-search" type="search" class="filters__search"
+               placeholder="🔍 제목·내용·구성원 검색" aria-label="검색" />
+      </div>
+      <div class="filters__row filters__row--year">
+        <label class="filters__yearlabel">📅 연도</label>
+        <div id="filter-years" class="filters__years" role="group" aria-label="연도(여러 개 선택 가능)"></div>
+      </div>
+      <div class="filters__row filters__row--cat">
+        <label class="filters__yearlabel">🏷️ 카테고리</label>
+        <div id="filter-categories" class="filters__cats" role="group" aria-label="카테고리"></div>
+      </div>
+      <div class="filters__row filters__row--sub">
+        <select id="filter-member" class="filters__select" aria-label="구성원">
+          <option value="">구성원 전체</option>
+        </select>
+        <label class="showhidden"><input type="checkbox" id="show-hidden" /> 숨긴 항목 보기</label>
+      </div>
+    </nav>
+
+    <main class="timeline-wrap">
+      <ol id="timeline" class="timeline"></ol>
+      <p id="empty" class="empty" hidden>아직 기록이 없어요. 오른쪽 아래 <b>＋</b> 버튼으로 첫 기록을 남겨보세요.</p>
+
+      <section id="calendar" class="calendar" hidden>
+        <div class="filters__row--search" style="margin-bottom:12px">
+          <input id="cal-search" type="search" class="filters__search"
+                 placeholder="🔍 일정·기념일·기록 검색 (전체 기간)" aria-label="캘린더 검색" />
+        </div>
+        <div id="cal-results" class="cal-summary" hidden></div>
+        <div id="cal-normal">
+          <div id="cal-summary" class="cal-summary"></div>
+          <div class="cal__head">
+            <button id="cal-prev" type="button" aria-label="이전 달">‹</button>
+            <div class="cal__pick">
+              <select id="cal-year" class="filters__select" aria-label="연도"></select>
+              <select id="cal-month" class="filters__select" aria-label="월"></select>
+            </div>
+            <button id="cal-next" type="button" aria-label="다음 달">›</button>
+          </div>
+          <div id="cal-grid" class="cal__grid"></div>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="footer"><span>💙 사랑하는 우리 가족 💙</span></footer>
+  </div>
+
+  <!-- 떠 있는 + 추가 버튼 -->
+  <button id="fab" class="fab" type="button" aria-label="새 기록 추가" hidden>＋</button>
+
+  <!-- 상세 모달 -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button class="modal__close" type="button" data-close aria-label="닫기">✕</button>
+      <div id="modal-body" class="modal__body"></div>
+    </div>
+  </div>
+
+  <!-- 추가/수정 폼 모달 -->
+  <div id="form-modal" class="modal" hidden>
+    <div class="modal__backdrop" data-form-close></div>
+    <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="form-title">
+      <button class="modal__close" type="button" data-form-close aria-label="닫기">✕</button>
+      <div class="modal__body">
+        <h2 id="form-title" class="md-title">새 기록</h2>
+        <form id="event-form" class="eform">
+          <input type="hidden" id="f-id" />
+          <div class="eform__row">
+            <label class="eform__label" style="flex:1">시작일 *
+              <input type="date" id="f-date" class="eform__input" required />
+            </label>
+            <label class="eform__label" style="flex:1">종료일 <span class="eform__hint">(기간이면)</span>
+              <input type="date" id="f-enddate" class="eform__input" />
+            </label>
+          </div>
+          <label class="eform__label">날짜 표기 <span class="eform__hint">(선택, 예: 2023년 여름)</span>
+            <input type="text" id="f-datedisplay" class="eform__input" placeholder="비우면 날짜 자동 표기" />
+          </label>
+          <label class="eform__label">제목 *
+            <input type="text" id="f-title" class="eform__input" required />
+          </label>
+          <div class="eform__row">
+            <label class="eform__label" style="flex:1">카테고리
+              <select id="f-category" class="eform__input"></select>
+            </label>
+            <label class="eform__label" style="flex:1">중요도
+              <select id="f-importance" class="eform__input">
+                <option value="0">없음</option>
+                <option value="1">★ 작은 변곡점</option>
+                <option value="2">★★ 중요한 날</option>
+                <option value="3">★★★ 인생 대사건</option>
+              </select>
+            </label>
+          </div>
+          <div class="eform__label">구성원
+            <div id="f-members" class="eform__members"></div>
+          </div>
+          <label class="eform__label">설명
+            <textarea id="f-description" class="eform__input" rows="3"></textarea>
+          </label>
+          <label class="eform__label">그때의 마음 (한 줄)
+            <input type="text" id="f-feeling" class="eform__input" />
+          </label>
+          <div class="eform__row">
+            <label class="eform__check"><input type="checkbox" id="f-published" checked /> 👁 페이지에 표시</label>
+          </div>
+          <div class="eform__label">사진 <span class="eform__hint">(⭐ 눌러 대표 썸네일 지정 · 드래그로 순서변경 대신 대표만 선택)</span>
+            <input type="file" id="f-photos" accept="image/*" multiple class="eform__file" />
+            <div id="f-photo-preview" class="eform__preview eform__preview--img"></div>
+          </div>
+          <div class="eform__actions">
+            <button type="button" id="f-delete" class="btn btn--danger" hidden>삭제</button>
+            <span style="flex:1"></span>
+            <button type="button" class="btn btn--ghost" data-form-close>취소</button>
+            <button type="submit" id="f-save" class="btn btn--primary">저장</button>
+          </div>
+          <p id="form-error" class="gate__error" role="alert" hidden></p>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 캘린더 일정 추가/수정 모달 -->
+  <div id="sched-modal" class="modal" hidden>
+    <div class="modal__backdrop" data-sched-close></div>
+    <div class="modal__panel" role="dialog" aria-modal="true">
+      <button class="modal__close" type="button" data-sched-close aria-label="닫기">✕</button>
+      <div class="modal__body">
+        <h2 id="sched-title" class="md-title">📅 일정 추가</h2>
+        <form id="sched-form" class="eform">
+          <input type="hidden" id="sc-id" />
+          <label class="eform__label">제목 *
+            <input id="sc-title" class="eform__input" required placeholder="예: 은호 예방접종" />
+          </label>
+          <label class="eform__label">카테고리
+            <select id="sc-category" class="eform__input"></select>
+          </label>
+          <div class="eform__row">
+            <label class="eform__label" style="flex:1">시작일 *
+              <input id="sc-date" class="eform__input" type="date" required />
+            </label>
+            <label class="eform__label" style="flex:1">종료일 <span class="eform__hint">(기간이면)</span>
+              <input id="sc-enddate" class="eform__input" type="date" />
+            </label>
+          </div>
+          <div class="eform__row">
+            <label class="eform__label" style="flex:1">종류/반복
+              <select id="sc-repeat" class="eform__input">
+                <option value="none">📅 일정 (한 번)</option>
+                <option value="weekly">🔁 매주 반복</option>
+                <option value="monthly">🔁 매월 반복</option>
+                <option value="yearly">🎂 기념일 (매년 반복)</option>
+              </select>
+            </label>
+            <label class="eform__check" id="sc-lunar-wrap" style="align-self:flex-end; padding-bottom:10px">
+              <input type="checkbox" id="sc-lunar" /> 🌙 음력으로
+            </label>
+          </div>
+          <p id="sc-lunar-hint" class="eform__hint" hidden></p>
+          <label class="eform__label">메모 <span class="eform__hint">(선택)</span>
+            <input id="sc-note" class="eform__input" />
+          </label>
+          <div class="eform__actions">
+            <button type="button" id="sc-delete" class="btn btn--danger" hidden>삭제</button>
+            <span style="flex:1"></span>
+            <button type="button" class="btn btn--ghost" data-sched-close>취소</button>
+            <button type="submit" class="btn btn--primary">저장</button>
+          </div>
+          <p id="sched-error" class="gate__error" role="alert" hidden></p>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 매년 반복 기념일 모달 -->
+  <div id="rec-modal" class="modal" hidden>
+    <div class="modal__backdrop" data-rec-close></div>
+    <div class="modal__panel" role="dialog" aria-modal="true">
+      <button class="modal__close" type="button" data-rec-close aria-label="닫기">✕</button>
+      <div class="modal__body">
+        <h2 class="md-title">🎂 매년 반복 기념일</h2>
+        <p class="eform__hint" style="margin:-6px 0 12px">생일·기념일을 등록하면 매년 캘린더에 자동 표시돼요. (음력 지원)</p>
+        <ul id="rec-list" class="rec-list"></ul>
+        <form id="rec-form" class="eform">
+          <h3 style="margin:4px 0 0; font-size:14px; color:var(--text)">➕ 새 기념일</h3>
+          <label class="eform__label">이름/제목 *
+            <input id="rc-title" class="eform__input" required placeholder="예: 할머니 생신, 결혼기념일" />
+          </label>
+          <div class="eform__row">
+            <label class="eform__label" style="flex:1">양력/음력
+              <select id="rc-cal" class="eform__input">
+                <option value="solar">양력</option>
+                <option value="lunar">음력</option>
+              </select>
+            </label>
+            <label class="eform__label" style="width:84px">월 *
+              <input id="rc-month" class="eform__input" type="number" min="1" max="12" required />
+            </label>
+            <label class="eform__label" style="width:84px">일 *
+              <input id="rc-day" class="eform__input" type="number" min="1" max="31" required />
+            </label>
+          </div>
+          <label class="eform__label">메모 <span class="eform__hint">(선택)</span>
+            <input id="rc-note" class="eform__input" />
+          </label>
+          <div class="eform__actions"><span style="flex:1"></span>
+            <button type="submit" class="btn btn--primary">추가</button>
+          </div>
+          <p id="rec-error" class="gate__error" role="alert" hidden></p>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 썸네일 영역 지정(크롭) 모달 -->
+  <div id="crop-modal" class="modal" hidden>
+    <div class="modal__backdrop" data-crop-close></div>
+    <div class="modal__panel" role="dialog" aria-modal="true">
+      <button class="modal__close" type="button" data-crop-close aria-label="닫기">✕</button>
+      <div class="modal__body">
+        <h2 class="md-title">✂️ 썸네일 영역 지정</h2>
+        <p class="eform__hint" style="margin:-6px 0 12px">네모를 드래그해 옮기고, 오른쪽 아래 모서리를 끌어 크기를 조절하세요. 이 정사각형 영역이 카드 썸네일이 됩니다.</p>
+        <div id="crop-stage" class="crop-stage">
+          <img id="crop-img" alt="" />
+          <div id="crop-box" class="crop-box"><span class="crop-handle"></span></div>
+        </div>
+        <div class="eform__actions" style="margin-top:14px">
+          <span style="flex:1"></span>
+          <button type="button" class="btn btn--ghost" data-crop-close>취소</button>
+          <button type="button" id="crop-apply" class="btn btn--primary">이 영역으로</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="lightbox" class="lightbox" hidden>
+    <button class="lightbox__close" type="button" data-lightbox-close aria-label="닫기">✕</button>
+    <img id="lightbox-img" class="lightbox__img" alt="" />
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lunar-javascript@1.7.4/lunar.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script>
+    (function () {
+      var v = "?_=" + Date.now();
+      function load(src, next) {
+        var s = document.createElement("script");
+        s.src = src + v; s.onload = next || null;
+        s.onerror = function () { console.error("로드 실패:", src); };
+        document.head.appendChild(s);
+      }
+      load("config.js", function () { load("app.js"); });
+    })();
+  </script>
+</body>
+</html>
