@@ -7,20 +7,20 @@
   /* 💚 화이트 베이스 — 연두 그린 & 하늘 블루 포인트 */
   --bg:        #ffffff;   /* 화이트 */
   --surface:   #ffffff;
-  --surface-2: #eaf4e3;   /* 연한 연두 크림 */
+  --surface-2: #f7f2dd;   /* 연한 노랑 크림 */
   --text:      #40454b;   /* 뉴트럴 그레이 */
   --text-soft: #8a8f95;
-  --line:      #dfe9d8;
-  --accent:    #a3d977;   /* 밝은 연두 그린 */
-  --accent-ink:#33581d;   /* 연두 위 글씨용 진한 초록 */
+  --line:      #ece8db;
+  --accent:    #f4ea6a;   /* 밝은 레몬 옐로 */
+  --accent-ink:#6f5a12;   /* 노랑 위 글씨용 진한 갈색 */
   --accent-2:  #7cc3ea;   /* 파스텔 하늘 블루 */
   --accent2-ink:#2f6d92;  /* 하늘 위 글씨용 진한 블루 */
   --star:      #f2a63c;   /* 중요도 별(앰버) */
-  --grad:      linear-gradient(90deg, #a3d977 0%, #7cc3ea 100%);
-  /* 거의 화이트, 맨 위만 아주 옅은 연두→하늘 */
-  --sky:       linear-gradient(180deg, #eef8e6 0%, #eef8fb 32%, #ffffff 60%);
-  --shadow:    0 2px 14px rgba(100, 140, 90, 0.10);
-  --shadow-lg: 0 16px 48px rgba(90, 130, 80, 0.15);
+  --grad:      linear-gradient(90deg, #f4ea6a 0%, #7cc3ea 100%);
+  /* 거의 화이트, 맨 위만 아주 옅은 노랑→하늘 */
+  --sky:       linear-gradient(180deg, #fdfbe4 0%, #eef8fb 32%, #ffffff 60%);
+  --shadow:    0 2px 14px rgba(150, 140, 90, 0.10);
+  --shadow-lg: 0 16px 48px rgba(140, 130, 80, 0.15);
   --radius:    18px;
   --maxw:      680px;
   --font: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
