@@ -73,7 +73,7 @@
 
     <main class="timeline-wrap">
       <ol id="timeline" class="timeline"></ol>
-      <p id="empty" class="empty" hidden>아직 기록이 없어요. 오른쪽 아래 <b>＋</b> 버튼으로 첫 기록을 남겨보세요.</p>
+      <p id="empty" class="empty" hidden></p>
 
       <section id="calendar" class="calendar" hidden>
         <div class="filters__row--search" style="margin-bottom:12px">
@@ -294,7 +294,7 @@
     <img id="lightbox-img" class="lightbox__img" alt="" />
   </div>
 
-  <div id="toast" class="toast" hidden></div>
+  <div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/lunar-javascript@1.7.4/lunar.js"></script>

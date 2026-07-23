@@ -84,9 +84,21 @@
   }
 
   /* ---------- 타임라인 렌더 ---------- */
+  const EMPTY_NONE = '아직 기록이 없어요. 오른쪽 아래 <b>＋</b> 버튼으로 첫 기록을 남겨보세요.';
+  const EMPTY_FILTERED = '조건에 맞는 기록이 없어요. <button type="button" id="empty-reset" class="btn btn--ghost">필터 초기화</button>';
   function renderTimeline(list) {
     const tl = $("#timeline"); tl.innerHTML = "";
-    $("#empty").hidden = list.length > 0;
+    // 기록이 아예 없는 것과 필터 때문에 0건인 것을 구분한다.
+    const emptyEl = $("#empty");
+    emptyEl.hidden = list.length > 0;
+    if (!list.length) {
+      if (state.all.length) {
+        emptyEl.innerHTML = EMPTY_FILTERED;
+        $("#empty-reset").onclick = resetFilters;
+      } else {
+        emptyEl.innerHTML = EMPTY_NONE;
+      }
+    }
     let cur = null;
     list.forEach((e) => {
       const y = yearOf(e);
@@ -132,7 +144,8 @@
   }
 
   /* ---------- 필터 ---------- */
-  const filters = { category: "", member: "", years: new Set(), showHidden: false, q: "" };
+  const FILTER_DEFAULTS = () => ({ category: "", member: "", years: new Set(), showHidden: false, q: "" });
+  const filters = FILTER_DEFAULTS();
   function buildFilters() {
     const cats = [], seen = new Set(), members = new Set(), years = new Set();
     state.all.forEach((e) => {
@@ -186,6 +199,11 @@
 
     $("#show-hidden").onchange = (ev) => { filters.showHidden = ev.target.checked; applyFilters(); };
   }
+  function resetFilters() {
+    Object.assign(filters, FILTER_DEFAULTS());
+    $("#filter-search").value = ""; $("#show-hidden").checked = false;
+    buildFilters(); applyFilters();
+  }
   function applyFilters() {
     state.view = state.all.filter((e) => {
       if (!filters.showHidden && e.published === false) return false;
@@ -201,6 +219,40 @@
     });
     renderTimeline(state.view);
   }
+
+  /* ---------- 오버레이 공용 포커스 관리 ----------
+     오버레이가 6개(상세·폼·일정·기념일·크롭·라이트박스)인데 각자 열고 닫기만 해서
+     Tab이 배경으로 새어나가고, 닫아도 원래 누른 자리로 돌아오지 않았다.
+     여는 쪽에서 focusTrap.on(패널), 닫는 쪽에서 focusTrap.off()만 부르면 된다. */
+  const focusTrap = (function () {
+    const stack = [];            // [{panel, opener}] — 크롭이 폼 위에 겹치므로 스택으로 둔다
+    function focusable(panel) {
+      return [...panel.querySelectorAll(
+        'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')]
+        .filter((el) => el.offsetParent !== null || el === document.activeElement);
+    }
+    function onKey(e) {
+      if (e.key !== "Tab" || !stack.length) return;
+      const items = focusable(stack[stack.length - 1].panel);
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    document.addEventListener("keydown", onKey);
+    return {
+      on(panel, focusFirst) {
+        if (!panel) return;
+        stack.push({ panel, opener: document.activeElement });
+        const items = focusable(panel);
+        (focusFirst || items[0] || panel).focus?.();
+      },
+      off() {
+        const top = stack.pop();
+        if (top && top.opener && document.contains(top.opener)) top.opener.focus();
+      },
+    };
+  })();
 
   /* ---------- 상세 모달 ---------- */
   let modalOpen = false;
@@ -223,8 +275,9 @@
         <button type="button" class="btn btn--ghost" id="md-edit">✏️ 수정</button>
       </div>`;
     $("#modal").hidden = false; modalOpen = true; document.body.style.overflow = "hidden";
-    history.pushState({ modal: true }, ""); $(".modal__close").focus();
-    $("#md-edit").onclick = () => { closeDetail(false); openForm(e); };
+    history.pushState({ modal: true }, ""); focusTrap.on($("#modal"), $(".modal__close"));
+    // 폼이 자기 이력을 push하므로 여기서는 history.back()을 부르지 않는다
+    $("#md-edit").onclick = () => { closeDetail(true); openForm(e); };
     // 사진 서명 URL 로드
     const wrap = $("#md-photos");
     for (const key of (e.photos || [])) {
@@ -239,11 +292,13 @@
   }
   function closeDetail(fromPop) {
     if (!modalOpen) return;
-    $("#modal").hidden = true; modalOpen = false; document.body.style.overflow = "";
+    $("#modal").hidden = true; modalOpen = false; document.body.style.overflow = ""; focusTrap.off();
     if (!fromPop && history.state && history.state.modal) history.back();
   }
-  function openLightbox(src, alt) { $("#lightbox-img").src = src; $("#lightbox-img").alt = alt || ""; $("#lightbox").hidden = false; }
-  function closeLightbox() { $("#lightbox").hidden = true; $("#lightbox-img").src = ""; }
+  function openLightbox(src, alt) { $("#lightbox-img").src = src; $("#lightbox-img").alt = alt || "";
+    $("#lightbox").hidden = false; focusTrap.on($("#lightbox")); }
+  function closeLightbox() { if ($("#lightbox").hidden) return;
+    $("#lightbox").hidden = true; $("#lightbox-img").src = ""; focusTrap.off(); }
 
   /* ---------- 추가/수정 폼 ---------- */
   function buildFormStatics() {
@@ -308,13 +363,39 @@
     $("#f-delete").hidden = !isEdit;
     $("#f-delete").onclick = () => deleteEvent(e);
     $("#form-modal").hidden = false; document.body.style.overflow = "hidden";
+    history.pushState({ form: true }, "");
+    focusTrap.on($("#form-modal")); // 뒤로가기로 폼만 닫히게 한다
     // 사진 → formItems (대표 지정/제거 가능). 기존 사진은 썸네일 서명URL 로드
     state.formItems = isEdit ? (e.photos || []).map((key) => ({ type: "existing", key, url: "" })) : [];
     renderPhotoPreview();
+    formSnapshot = formState();
     for (const it of state.formItems) { it.url = await signOne(thumbKey(it.key)); }
     renderPhotoPreview();
   }
-  function closeForm() { $("#form-modal").hidden = true; document.body.style.overflow = ""; }
+  // 폼을 연 시점의 값을 스냅샷으로 잡아 두고, 닫을 때 달라졌는지로 판단한다.
+  // (값이 채워졌는지로 보면 수정 모드에서는 손대지 않아도 항상 "작성 중"이 된다)
+  let formSnapshot = "";
+  function formState() {
+    return JSON.stringify([
+      $("#f-title").value, $("#f-description").value, $("#f-feeling").value,
+      $("#f-date").value, $("#f-enddate").value, $("#f-datedisplay").value,
+      $("#f-category").value, $("#f-importance").value, $("#f-published").checked,
+      $$("#f-members input:checked").length, state.formItems.length,
+    ]);
+  }
+  function hideForm(fromPop) {
+    $("#form-modal").hidden = true; document.body.style.overflow = ""; focusTrap.off();
+    if (!fromPop && history.state && history.state.form) history.back();
+  }
+  // 사용자가 닫을 때 — 작성 중인 내용이 있으면 확인을 받는다.
+  function closeForm(fromPop) {
+    if ($("#form-modal").hidden) return;
+    if (formState() !== formSnapshot && !confirm("작성 중인 내용이 있어요. 저장하지 않고 닫을까요?")) {
+      if (fromPop) history.pushState({ form: true }, ""); // 뒤로가기를 취소했으니 이력을 되돌린다
+      return;
+    }
+    hideForm(fromPop);
+  }
 
   /* ---------- 사진 리사이즈 ---------- */
   function resize(file, maxEdge, quality) {
@@ -403,10 +484,12 @@
       const { error: e2 } = await sb.from("events").update({ photos }).eq("id", eventId);
       if (e2) throw e2;
 
-      closeForm(); toast(id ? "수정했어요" : "기록을 추가했어요 🌸");
+      hideForm(false); toast(id ? "수정했어요" : "기록을 추가했어요 🌸");
       await reload();
     } catch (e) {
-      console.error(e); err.textContent = "저장 실패: " + (e.message || e); err.hidden = false;
+      console.error(e);
+      err.textContent = "저장하지 못했어요. 잠시 뒤 다시 눌러 주세요. 계속 안 되면 새로고침 후 다시 로그인해 보세요.";
+      err.hidden = false;
     } finally {
       save.disabled = false; save.textContent = "저장";
     }
@@ -414,11 +497,11 @@
   async function deleteEvent(e) {
     if (!confirm(`"${e.title}" 기록을 삭제할까요? 되돌릴 수 없어요.`)) return;
     const { error } = await sb.from("events").delete().eq("id", e.id);
-    if (error) { alert("삭제 실패: " + error.message); return; }
+    if (error) { console.error(error); toast("삭제하지 못했어요. 잠시 뒤 다시 시도해 주세요."); return; }
     // 사진 파일도 정리(있으면)
     const keys = (e.photos || []).flatMap((k) => [k, thumbKey(k)]);
     if (keys.length) await sb.storage.from(BUCKET).remove(keys);
-    closeForm(); toast("삭제했어요"); await reload();
+    hideForm(false); toast("삭제했어요"); await reload();
   }
 
   /* ---------- 캘린더 + 반복 기념일 ---------- */
@@ -577,13 +660,16 @@
     };
     if (!payload.title || !payload.month || !payload.day) { err.textContent = "이름·월·일을 입력해 주세요."; err.hidden = false; return; }
     const { error } = await sb.from("recurring_events").insert(payload);
-    if (error) { err.textContent = "추가 실패: " + error.message; err.hidden = false; return; }
+    if (error) { console.error(error);
+      err.textContent = "추가하지 못했어요. 잠시 뒤 다시 눌러 주세요."; err.hidden = false; return; }
     $("#rec-form").reset();
     await loadRecurring(); renderRecList(); toast("기념일을 추가했어요 🎂");
     if (state.viewMode === "calendar") renderCalendar();
   }
-  function openRecurring() { renderRecList(); $("#rec-modal").hidden = false; document.body.style.overflow = "hidden"; }
-  function closeRecurring() { $("#rec-modal").hidden = true; document.body.style.overflow = ""; }
+  function openRecurring() { renderRecList(); $("#rec-modal").hidden = false; document.body.style.overflow = "hidden";
+    focusTrap.on($("#rec-modal")); }
+  function closeRecurring() { if ($("#rec-modal").hidden) return;
+    $("#rec-modal").hidden = true; document.body.style.overflow = ""; focusTrap.off(); }
 
   /* ---------- 캘린더 일정(schedules) ---------- */
   async function loadSchedules() {
@@ -658,9 +744,10 @@
     $("#sc-delete").hidden = !isEdit;
     $("#sc-delete").onclick = () => deleteSchedule(s);
     updateSchedFormUI();
-    $("#sched-modal").hidden = false; document.body.style.overflow = "hidden";
+    $("#sched-modal").hidden = false; document.body.style.overflow = "hidden"; focusTrap.on($("#sched-modal"));
   }
-  function closeSchedule() { $("#sched-modal").hidden = true; document.body.style.overflow = ""; }
+  function closeSchedule() { if ($("#sched-modal").hidden) return;
+    $("#sched-modal").hidden = true; document.body.style.overflow = ""; focusTrap.off(); }
   async function saveSchedule(ev) {
     ev.preventDefault();
     const err = $("#sched-error"); err.hidden = true;
@@ -675,14 +762,15 @@
     if (!payload.title || !payload.start_date) { err.textContent = "제목과 시작일은 필수예요."; err.hidden = false; return; }
     const q = id ? sb.from("schedules").update(payload).eq("id", id) : sb.from("schedules").insert(payload);
     const { error } = await q;
-    if (error) { err.textContent = "저장 실패: " + error.message; err.hidden = false; return; }
+    if (error) { console.error(error);
+      err.textContent = "저장하지 못했어요. 잠시 뒤 다시 눌러 주세요."; err.hidden = false; return; }
     closeSchedule(); toast(id ? "수정했어요" : (payload.repeat !== "none" ? "기념일을 추가했어요 🎂" : "일정을 추가했어요 📅"));
     await loadSchedules(); renderCalendar();
   }
   async function deleteSchedule(s) {
     if (!confirm(`"${s.title}" 을(를) 삭제할까요?`)) return;
     const { error } = await sb.from("schedules").delete().eq("id", s.id);
-    if (error) { alert("삭제 실패: " + error.message); return; }
+    if (error) { console.error(error); toast("삭제하지 못했어요. 잠시 뒤 다시 시도해 주세요."); return; }
     closeSchedule(); toast("삭제했어요"); await loadSchedules(); renderCalendar();
   }
 
@@ -703,12 +791,12 @@
       if (!url) { toast("사진을 불러오지 못했어요"); return; }
       img.src = url;
     }
-    $("#crop-modal").hidden = false; document.body.style.overflow = "hidden";
+    $("#crop-modal").hidden = false; document.body.style.overflow = "hidden"; focusTrap.on($("#crop-modal"));
   }
   function closeCrop() {
     const img = $("#crop-img");
     if (img.src.startsWith("blob:")) URL.revokeObjectURL(img.src);
-    $("#crop-modal").hidden = true; document.body.style.overflow = "";
+    $("#crop-modal").hidden = true; document.body.style.overflow = ""; focusTrap.off();
     cropIndex = -1; cropDrag = null;
   }
   function initCropBox() {
@@ -773,13 +861,13 @@
       it.url = fresh; state.thumbUrls[tkey] = fresh;
       closeCrop(); renderPhotoPreview(); applyFilters(); toast("썸네일을 다시 잘랐어요 ✂️");
     } catch (e) {
-      console.error(e); alert("썸네일 저장 실패: " + (e.message || e));
+      console.error(e); toast("사진 영역을 저장하지 못했어요. 다시 시도해 주세요.");
     }
   }
 
   /* ---------- 엑셀 백업 다운로드 ---------- */
   function exportExcel() {
-    if (!window.XLSX) { alert("엑셀 라이브러리 로드 실패 (인터넷을 확인해 주세요)"); return; }
+    if (!window.XLSX) { toast("인터넷 연결을 확인한 뒤 다시 눌러 주세요."); return; }
     toast("백업 파일 만드는 중…");
     const evRows = state.all.map((e) => ({
       날짜: e.date || "", 종료일: e.end_date || "", 날짜표기: e.date_display || "",
@@ -808,7 +896,8 @@
   /* ---------- 데이터 로드 ---------- */
   async function reload() {
     const { data, error } = await sb.from("events").select("*").order("date", { ascending: false });
-    if (error) { console.error(error); toast("불러오기 실패"); return; }
+    if (error) { console.error(error);
+      toast("기록을 불러오지 못했어요. 새로고침해 주세요."); return; }
     state.all = data || [];
     state.thumbUrls = {};
     await signThumbs(state.all);
@@ -821,17 +910,22 @@
   /* ---------- 이벤트 바인딩 ---------- */
   function wire() {
     $$("#modal [data-close]").forEach((el) => (el.onclick = () => closeDetail(false)));
-    $$("[data-form-close]").forEach((el) => (el.onclick = closeForm));
+    $$("[data-form-close]").forEach((el) => (el.onclick = () => closeForm(false)));
     $$("[data-lightbox-close]").forEach((el) => (el.onclick = closeLightbox));
     $("#lightbox").addEventListener("click", (e) => { if (e.target.id === "lightbox") closeLightbox(); });
-    window.addEventListener("popstate", () => { if (modalOpen) closeDetail(true); });
+    window.addEventListener("popstate", () => {
+      // 폼 위에 크롭이 떠 있으면 위엣것부터 닫는다 (Escape 우선순위와 동일)
+      if (!$("#crop-modal").hidden) { closeCrop(); history.pushState({ form: true }, ""); return; }
+      if (!$("#form-modal").hidden) { closeForm(true); return; }
+      if (modalOpen) closeDetail(true);
+    });
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       if (!$("#crop-modal").hidden) closeCrop();
       else if (!$("#lightbox").hidden) closeLightbox();
       else if (!$("#sched-modal").hidden) closeSchedule();
       else if (!$("#rec-modal").hidden) closeRecurring();
-      else if (!$("#form-modal").hidden) closeForm();
+      else if (!$("#form-modal").hidden) closeForm(false);
       else if (modalOpen) closeDetail(false);
     });
     $("#fab").onclick = () => {
@@ -901,7 +995,7 @@
   }
 
   async function boot() {
-    if (!window.supabase) { alert("Supabase 라이브러리 로드 실패 (인터넷 확인)"); return; }
+    if (!window.supabase) { alert("인터넷 연결을 확인한 뒤 새로고침해 주세요."); return; }
     if (!CFG.supabaseUrl || !CFG.supabaseAnonKey) { alert("config.js에 Supabase URL/키가 없습니다."); return; }
     sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseAnonKey);
     bindLogin();
