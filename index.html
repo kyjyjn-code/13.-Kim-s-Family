@@ -328,6 +328,24 @@
           <p class="care__hint">주말 = 토·일·공휴일(설·추석·부처님오신날 등 자동). 평일은 18:00을 경계로 오전·오후 / 저녁이 자동 분할됩니다.</p>
         </details>
 
+        <div class="care__bulkbar">
+          <button id="care-selmode" type="button" class="btn">🗓️ 여러 날 선택</button>
+          <div id="care-bulk" class="care__bulk" hidden>
+            <p class="care__hint" style="margin:0 0 8px">달력에서 같은 시간대로 입력할 날짜들을 여러 개 누른 뒤, 아래를 채우고 [추가]를 누르세요.</p>
+            <div class="care__frow">
+              <label class="care__field">돌봄
+                <select id="bulk-who"><option value="장인어른">장인어른</option><option value="처제">처제</option></select>
+              </label>
+              <label class="care__field">시작<input type="time" id="bulk-start"></label>
+              <label class="care__field">종료<input type="time" id="bulk-end"></label>
+            </div>
+            <div id="bulk-preview" class="care__preview" aria-live="polite"></div>
+            <div class="care__frow care__frow--btns">
+              <button id="bulk-apply" type="button" class="btn btn--primary">선택한 0일에 추가</button>
+              <button id="bulk-clear" type="button" class="btn">선택 해제</button>
+            </div>
+          </div>
+        </div>
         <div id="care-cal" class="care-cal"></div>
         <p class="care__hint" style="text-align:center">날짜 칸을 눌러 그날 봐주신 시간을 입력하세요. <i class="dot dot--f"></i> 장인어른 · <i class="dot dot--s"></i> 처제</p>
         <div id="care-summary" class="care__summary"></div>
