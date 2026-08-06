@@ -8,6 +8,7 @@
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const BUCKET = "photos";
+  const DOW = ["일", "월", "화", "수", "목", "금", "토"];   // 요일 라벨 (공용)
 
   let sb = null;
   const state = { all: [], view: [], thumbUrls: {}, formItems: [],
@@ -81,6 +82,26 @@
   async function signOne(key) {
     const { data } = await sb.storage.from(BUCKET).createSignedUrl(key, 3600);
     return data ? data.signedUrl : "";
+  }
+  // 여러 키를 한 번의 요청으로 서명 (key → url 맵). 사진마다 개별 호출(N+1) 방지.
+  async function signMany(keys) {
+    if (!keys.length) return {};
+    const { data } = await sb.storage.from(BUCKET).createSignedUrls(keys, 3600);
+    const map = {};
+    (data || []).forEach((d) => { if (d && d.signedUrl) map[d.path] = d.signedUrl; });
+    return map;
+  }
+  // PostgREST 기본 1000행 상한을 넘겨도 전량을 받도록 페이지네이션. (조용한 절단 방지)
+  async function selectAll(table, orderCol, ascending) {
+    const PAGE = 1000, rows = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await sb.from(table).select("*")
+        .order(orderCol, { ascending }).range(from, from + PAGE - 1);
+      if (error) throw error;
+      rows.push(...(data || []));
+      if (!data || data.length < PAGE) break;
+    }
+    return rows;
   }
 
   /* ---------- 타임라인 렌더 ---------- */
@@ -280,8 +301,10 @@
     $("#md-edit").onclick = () => { closeDetail(true); openForm(e); };
     // 사진 서명 URL 로드
     const wrap = $("#md-photos");
-    for (const key of (e.photos || [])) {
-      const url = await signOne(key);
+    const keys = e.photos || [];
+    const urls = await signMany(keys);
+    for (const key of keys) {
+      const url = urls[key];
       if (url) {
         const img = document.createElement("img");
         img.loading = "lazy"; img.src = url; img.alt = e.title;
@@ -369,7 +392,9 @@
     state.formItems = isEdit ? (e.photos || []).map((key) => ({ type: "existing", key, url: "" })) : [];
     renderPhotoPreview();
     formSnapshot = formState();
-    for (const it of state.formItems) { it.url = await signOne(thumbKey(it.key)); }
+    const tkeys = state.formItems.map((it) => thumbKey(it.key));
+    const turls = await signMany(tkeys);
+    state.formItems.forEach((it) => { it.url = turls[thumbKey(it.key)] || ""; });
     renderPhotoPreview();
   }
   // 폼을 연 시점의 값을 스냅샷으로 잡아 두고, 닫을 때 달라졌는지로 판단한다.
@@ -543,8 +568,11 @@
     const tb = box.querySelector("tbody");
     rows.forEach((r) => {
       const tr = document.createElement("tr"); tr.style.cursor = "pointer";
+      tr.tabIndex = 0; tr.setAttribute("role", "button");
       tr.innerHTML = `<td class="cr-date">${esc(r.date)}</td><td><span class="ct-kind ${r.cls}">${r.kind}</span></td><td>${r.emoji} ${esc(r.title)}</td>`;
-      tr.onclick = r.cb; tb.appendChild(tr);
+      tr.onclick = r.cb;
+      tr.onkeydown = (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); r.cb(); } };
+      tb.appendChild(tr);
     });
   }
   function renderCalendar() {
@@ -592,7 +620,7 @@
       : `<div class="cal-summary__empty">${y}년 ${m}월엔 일정이 없어요.</div>`;
 
     const grid = $("#cal-grid"); grid.innerHTML = "";
-    ["일", "월", "화", "수", "목", "금", "토"].forEach((d) => {
+    DOW.forEach((d) => {
       const h = document.createElement("div"); h.className = "cal__dow"; h.textContent = d; grid.appendChild(h);
     });
     for (let i = 0; i < startDow; i++) {
@@ -866,9 +894,22 @@
   }
 
   /* ---------- 엑셀 백업 다운로드 ---------- */
-  function exportExcel() {
-    if (!window.XLSX) { toast("인터넷 연결을 확인한 뒤 다시 눌러 주세요."); return; }
+  // xlsx(≈0.9MB)는 백업 누를 때만 필요 — 첫 로드 대신 여기서 지연 로딩한다.
+  function ensureXLSX() {
+    if (window.XLSX) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+      s.onload = () => resolve(!!window.XLSX);
+      s.onerror = () => resolve(false);
+      document.head.appendChild(s);
+    });
+  }
+  async function exportExcel() {
     toast("백업 파일 만드는 중…");
+    if (!window.XLSX && !(await ensureXLSX())) {
+      toast("인터넷 연결을 확인한 뒤 다시 눌러 주세요."); return;
+    }
     const evRows = state.all.map((e) => ({
       날짜: e.date || "", 종료일: e.end_date || "", 날짜표기: e.date_display || "",
       제목: e.title || "", 카테고리: e.category || "", 구성원: (e.members || []).join(", "),
@@ -899,12 +940,11 @@
   const careState = { y: 0, m: 0, tab: "month", rows: [], selDate: "",
     selMode: false, selDates: new Set(),
     settings: { rate_day: 10000, rate_evening: 15000, rate_weekend: 20000 } };
-  const CARE_DOW = ["일", "월", "화", "수", "목", "금", "토"];
+  const CARE_DOW = DOW;
   const CARE_EVENING_START = 18 * 60;   // 평일 저녁 요율 경계 = 18:00
 
   // ----- 순수 계산 로직 -----
   const careHm2min = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(t || ""); return m ? (+m[1]) * 60 + (+m[2]) : null; };
-  const careIso = (y, m, d) => `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   const careDow = (date) => { const [y, mo, da] = date.split("-").map(Number); return new Date(y, mo - 1, da).getDay(); };
   const careWon = (n) => `${(n || 0).toLocaleString("ko-KR")}원`;
   const careHours = (min) => (min / 60).toFixed(2).replace(/\.?0+$/, "");
@@ -915,7 +955,7 @@
     const s = new Set();
     // 양력 고정 공휴일
     [[1, 1], [3, 1], [5, 5], [6, 6], [8, 15], [10, 3], [10, 9], [12, 25]]
-      .forEach(([m, d]) => s.add(careIso(year, m, d)));
+      .forEach(([m, d]) => s.add(ymd(year, m, d)));
     // 음력 공휴일 (설날·추석은 앞뒤 하루 포함, 부처님오신날)
     const L = window.Lunar;
     if (L) {
@@ -925,7 +965,7 @@
           const base = new Date(so.getYear(), so.getMonth() - 1, so.getDay());
           for (let k = -spread; k <= spread; k++) {
             const dd = new Date(base); dd.setDate(base.getDate() + k);
-            s.add(careIso(dd.getFullYear(), dd.getMonth() + 1, dd.getDate()));
+            s.add(ymd(dd.getFullYear(), dd.getMonth() + 1, dd.getDate()));
           }
         } catch (_) {}
       };
@@ -967,18 +1007,22 @@
 
   // ----- 데이터 로드 -----
   async function careReload() {
-    const [rowsRes, stRes] = await Promise.all([
-      sb.from("care_sessions").select("*").order("work_date", { ascending: true }),
-      sb.from("care_settings").select("*").eq("id", 1),
-    ]);
-    careState.rows = rowsRes.data || [];
-    const st = stRes.data && stRes.data[0];
+    let rows = [], st = null;
+    try {
+      const [r, stRes] = await Promise.all([
+        selectAll("care_sessions", "work_date", true),      // 1000행 넘어도 전량 (총액 정확)
+        sb.from("care_settings").select("*").eq("id", 1),
+      ]);
+      rows = r; st = stRes.data && stRes.data[0];
+    } catch (e) { console.error(e); toast("사례금 기록을 불러오지 못했어요. 새로고침해 주세요."); }
+    careState.rows = rows;
     if (st) careState.settings = { rate_day: st.rate_day, rate_evening: st.rate_evening, rate_weekend: st.rate_weekend };
   }
 
   // ----- 열기/닫기/탭 -----
   async function openCare() {
     $("#care-modal").hidden = false; document.body.style.overflow = "hidden";
+    focusTrap.on($("#care-modal"));
     if (!careState.y) { const n = new Date(); careState.y = n.getFullYear(); careState.m = n.getMonth() + 1; }
     careSetTab("month");
     await careReload();
@@ -987,7 +1031,7 @@
     $("#rate-weekend").value = careState.settings.rate_weekend;
     careExitSelMode(); careResetForm(); renderCareMonth();
   }
-  function closeCare() { $("#care-modal").hidden = true; document.body.style.overflow = ""; }
+  function closeCare() { $("#care-modal").hidden = true; document.body.style.overflow = ""; focusTrap.off(); }
   function careSetTab(t) {
     careState.tab = t;
     $("#care-tab-month").classList.toggle("is-active", t === "month");
@@ -1000,8 +1044,8 @@
     if (t === "range") {
       if (!$("#care-range-from").value) {
         const n = new Date();
-        $("#care-range-from").value = careIso(n.getFullYear(), n.getMonth() + 1, 1);
-        $("#care-range-to").value = careIso(n.getFullYear(), n.getMonth() + 1, n.getDate());
+        $("#care-range-from").value = ymd(n.getFullYear(), n.getMonth() + 1, 1);
+        $("#care-range-to").value = ymd(n.getFullYear(), n.getMonth() + 1, n.getDate());
       }
       renderCareRange();
     }
@@ -1106,7 +1150,7 @@
     $("#care-month-label").textContent = `${careState.y}년 ${careState.m}월`;
     renderCareCal(); renderCareSummary();
   }
-  const careTodayStr = () => { const n = new Date(); return careIso(n.getFullYear(), n.getMonth() + 1, n.getDate()); };
+  const careTodayStr = () => { const n = new Date(); return ymd(n.getFullYear(), n.getMonth() + 1, n.getDate()); };
   const careCellAmt = (t) => (t >= 10000 ? `${+(t / 10000).toFixed(1)}만` : `${t}`);
   const careDayRows = (date) => careState.rows.filter((r) => r.work_date === date);
 
@@ -1119,13 +1163,13 @@
     for (const r of careMonthRows()) { const d = +r.work_date.split("-")[2]; (byDay[d] || (byDay[d] = [])).push(r); }
     const today = careTodayStr();
     let html = `<div class="cal__grid">`;
-    ["일", "월", "화", "수", "목", "금", "토"].forEach((w, i) => {
+    DOW.forEach((w, i) => {
       const c = i === 0 ? ' style="color:#d06b6b"' : i === 6 ? ' style="color:var(--accent2-ink)"' : "";
       html += `<div class="cal__dow"${c}>${w}</div>`;
     });
     for (let i = 0; i < first; i++) html += `<div class="cal__cell cal__cell--empty"></div>`;
     for (let d = 1; d <= days; d++) {
-      const ds = careIso(y, m, d), rows = byDay[d] || [];
+      const ds = ymd(y, m, d), rows = byDay[d] || [];
       const total = rows.reduce((s, r) => s + (r.amount || 0), 0);
       const wk = careDow(ds) === 0 || careDow(ds) === 6 || careIsHoliday(ds);
       const hasF = rows.some((r) => r.caregiver === "장인어른"), hasS = rows.some((r) => r.caregiver === "처제");
@@ -1203,8 +1247,9 @@
     $("#care-who").value = "장인어른"; $("#care-kind").value = "time";
     careResetForm(); renderCareDayList();
     $("#care-day-modal").hidden = false;
+    focusTrap.on($("#care-day-modal"));
   }
-  function closeCareDay() { $("#care-day-modal").hidden = true; }
+  function closeCareDay() { $("#care-day-modal").hidden = true; focusTrap.off(); }
   function renderCareDayList() {
     const rows = careDayRows(careState.selDate).slice()
       .sort((a, b) => ((a.start_time || "99") < (b.start_time || "99") ? -1 : 1));
@@ -1300,31 +1345,30 @@
       const [y, mo] = k.split("-"); const g = byMon[k];
       const j = g["장인어른"] || { min: 0, amt: 0 }, c = g["처제"] || { min: 0, amt: 0 };
       gjm += j.min; gja += j.amt; gcm += c.min; gca += c.amt;
-      rowsHtml += `<tr><td class="care-hist__mon" data-y="${+y}" data-m="${+mo}">${+y}.${+mo}</td>` +
+      rowsHtml += `<tr><td><button type="button" class="care-hist__mon" data-y="${+y}" data-m="${+mo}">${+y}.${+mo}</button></td>` +
         `<td>${j.min ? careHours(j.min) + "h" : "—"}</td><td>${j.amt ? careWon(j.amt) : "—"}</td>` +
         `<td>${c.min ? careHours(c.min) + "h" : "—"}</td><td>${c.amt ? careWon(c.amt) : "—"}</td>` +
         `<td>${careWon(j.amt + c.amt)}</td></tr>`;
     }
-    body.innerHTML = `<table class="care-hist__table"><thead><tr>` +
+    body.innerHTML = `<div class="care-hist__wrap"><table class="care-hist__table"><thead><tr>` +
       `<th>월</th><th>장인어른</th><th>사례금</th><th>처제</th><th>사례금</th><th>합계</th></tr></thead>` +
       `<tbody>${rowsHtml}</tbody><tfoot><tr class="care-hist__grand"><td>전체</td>` +
       `<td>${careHours(gjm)}h</td><td>${careWon(gja)}</td><td>${careHours(gcm)}h</td><td>${careWon(gca)}</td>` +
-      `<td>${careWon(gja + gca)}</td></tr></tfoot></table>`;
-    body.querySelectorAll(".care-hist__mon").forEach((td) => {
-      td.onclick = () => { careState.y = +td.dataset.y; careState.m = +td.dataset.m; careSetTab("month"); careResetForm(); renderCareMonth(); };
+      `<td>${careWon(gja + gca)}</td></tr></tfoot></table></div>`;
+    body.querySelectorAll(".care-hist__mon").forEach((btn) => {
+      btn.onclick = () => { careState.y = +btn.dataset.y; careState.m = +btn.dataset.m; careSetTab("month"); careResetForm(); renderCareMonth(); };
     });
   }
 
   /* ---------- 데이터 로드 ---------- */
   async function reload() {
-    const { data, error } = await sb.from("events").select("*").order("date", { ascending: false });
-    if (error) { console.error(error);
-      toast("기록을 불러오지 못했어요. 새로고침해 주세요."); return; }
-    state.all = data || [];
+    let data;
+    try { data = await selectAll("events", "date", false); }
+    catch (error) { console.error(error); toast("기록을 불러오지 못했어요. 새로고침해 주세요."); return; }
+    state.all = data;
     state.thumbUrls = {};
-    await signThumbs(state.all);
-    await loadRecurring();
-    await loadSchedules();
+    // 셋은 서로 무관 — 병렬로 (signThumbs는 events에만 의존하고 이미 state.all에 있음)
+    await Promise.all([signThumbs(state.all), loadRecurring(), loadSchedules()]);
     renderHeader(); buildFilters(); applyFilters();
     if (state.viewMode === "calendar") renderCalendar();
   }

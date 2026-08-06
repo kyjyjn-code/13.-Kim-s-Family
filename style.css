@@ -42,6 +42,8 @@ body {
   background-attachment: fixed;
   color: var(--text);
   line-height: 1.6;
+  word-break: keep-all;        /* 한글 어절 단위 줄바꿈 (낱글자 잘림 방지) */
+  overflow-wrap: anywhere;     /* 긴 URL·단어는 그래도 넘치지 않게 */
   -webkit-font-smoothing: antialiased;
 }
 [hidden] { display: none !important; }
@@ -76,7 +78,9 @@ button { font-family: inherit; cursor: pointer; }
   transition: filter .15s ease;
 }
 .gate__btn:hover { filter: brightness(1.06); }
-.gate__error { margin: 12px 0 0; color: #c05b5b; font-size: 13px; }
+.gate__label { display: block; text-align: left; font-size: 13px; color: var(--text-soft); margin-bottom: 12px; }
+.gate__label .gate__input { margin-top: 4px; margin-bottom: 0; }
+.gate__error { margin: 12px 0 0; color: #a4262c; font-size: 13px; }
 
 /* ---------- 헤더 ---------- */
 .app { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 64px; }
@@ -233,7 +237,7 @@ button { font-family: inherit; cursor: pointer; }
 .card__body { flex: 1; min-width: 0; }
 /* 1줄: 날짜(크고 진하게, 왼쪽) + 키워드·중요도(오른쪽) */
 .card__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.card__date { font-size: 15px; font-weight: 800; color: #22262b; letter-spacing: -0.01em; }
+.card__date { font-size: 15px; font-weight: 800; color: #22262b; }
 .card__topright { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .card__stars { flex: 0 0 auto; color: var(--star); font-size: 14px; letter-spacing: 1px; }
 /* 키워드(아이콘 + 이름) 배지 */
@@ -470,7 +474,7 @@ textarea.eform__input { resize: vertical; }
 .care__panel { display: block; }
 .care__nav { display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 12px; }
 .care__nav h3 { font-size: 18px; margin: 0; min-width: 130px; text-align: center; }
-.care__nav button { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); font-size: 20px; color: var(--text); }
+.care__nav button { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); font-size: 20px; color: var(--text); }
 .care__nav button:hover { border-color: var(--accent-2); }
 
 .care__settings { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 10px 14px; margin-bottom: 14px; }
@@ -500,7 +504,7 @@ textarea.eform__input { resize: vertical; }
 .care-item__detail { font-size: 12px; color: var(--text-soft); margin-top: 2px; }
 .care-item__amt { font-size: 15px; font-weight: 800; color: var(--text); white-space: nowrap; }
 .care-item__btns { display: flex; gap: 4px; flex: 0 0 auto; }
-.care-item__btns button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); font-size: 13px; }
+.care-item__btns button { width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); font-size: 13px; }
 .care-empty { text-align: center; color: var(--text-soft); font-size: 14px; padding: 20px 0; }
 
 .care__summary { border: 2px solid var(--accent); border-radius: 14px; background: var(--surface-2); padding: 14px 16px; }
@@ -531,11 +535,12 @@ textarea.eform__input { resize: vertical; }
 .care__rangebar { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
 .care__rangebar .care__field { flex: 1; min-width: 130px; }
 
+.care-hist__wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.care-hist__mon { background: none; border: none; font: inherit; color: var(--accent2-ink); text-decoration: underline; cursor: pointer; padding: 0; }
 .care-hist__table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .care-hist__table th, .care-hist__table td { padding: 9px 8px; border-bottom: 1px solid var(--line); text-align: right; }
 .care-hist__table th { color: var(--text-soft); font-weight: 700; font-size: 12px; }
 .care-hist__table td:first-child, .care-hist__table th:first-child { text-align: left; font-weight: 700; }
-.care-hist__mon { cursor: pointer; color: var(--accent2-ink); text-decoration: underline; }
 .care-hist__grand td { border-top: 2px solid var(--accent); font-weight: 800; border-bottom: none; }
 
 /* ---------- 모션 저감 ---------- */

@@ -13,10 +13,14 @@
     <form id="login-form" class="gate__box" autocomplete="on">
       <h1 class="gate__title">김영진 💛 구경림 가족 일기</h1>
       <p class="gate__desc">하나님을 사랑하는 우리 가족의 기록<br>가족만 로그인해서 볼 수 있어요.</p>
-      <input id="login-email" class="gate__input" type="email" placeholder="이메일"
-             aria-label="이메일" autocomplete="username" required />
-      <input id="login-pw" class="gate__input" type="password" placeholder="비밀번호"
-             aria-label="비밀번호" autocomplete="current-password" required />
+      <label class="gate__label">이메일
+        <input id="login-email" class="gate__input" type="email" placeholder="예: gil@example.com"
+               aria-label="이메일" autocomplete="username" required />
+      </label>
+      <label class="gate__label">비밀번호
+        <input id="login-pw" class="gate__input" type="password" placeholder="비밀번호"
+               aria-label="비밀번호" autocomplete="current-password" required />
+      </label>
       <button class="gate__btn" type="submit" id="login-btn">들어가기</button>
       <p id="login-error" class="gate__error" role="alert" hidden></p>
     </form>
@@ -251,10 +255,10 @@
               </select>
             </label>
             <label class="eform__label" style="width:84px">월 *
-              <input id="rc-month" class="eform__input" type="number" min="1" max="12" required />
+              <input id="rc-month" class="eform__input" type="number" inputmode="numeric" min="1" max="12" required />
             </label>
             <label class="eform__label" style="width:84px">일 *
-              <input id="rc-day" class="eform__input" type="number" min="1" max="31" required />
+              <input id="rc-day" class="eform__input" type="number" inputmode="numeric" min="1" max="31" required />
             </label>
           </div>
           <label class="eform__label">메모 <span class="eform__hint">(선택)</span>
@@ -320,9 +324,9 @@
         <details id="care-settings" class="care__settings">
           <summary>⚙️ 시급 설정</summary>
           <div class="care__rates">
-            <label>평일 오전·오후<input type="number" id="rate-day" min="0" step="500"> 원/시간</label>
-            <label>평일 저녁(18시~)<input type="number" id="rate-evening" min="0" step="500"> 원/시간</label>
-            <label>주말·공휴일<input type="number" id="rate-weekend" min="0" step="500"> 원/시간</label>
+            <label>평일 오전·오후<input type="number" inputmode="numeric" id="rate-day" min="0" step="500"> 원/시간</label>
+            <label>평일 저녁(18시~)<input type="number" inputmode="numeric" id="rate-evening" min="0" step="500"> 원/시간</label>
+            <label>주말·공휴일<input type="number" inputmode="numeric" id="rate-weekend" min="0" step="500"> 원/시간</label>
             <button id="care-rate-save" type="button" class="btn">시급 저장</button>
           </div>
           <p class="care__hint">주말 = 토·일·공휴일(설·추석·부처님오신날 등 자동). 평일은 18:00을 경계로 오전·오후 / 저녁이 자동 분할됩니다.</p>
@@ -402,7 +406,7 @@
 
           <div class="care__frow" id="care-fixed-fields" hidden>
             <label class="care__field care__field--wide">항목 이름<input type="text" id="care-flabel" placeholder="예: 로이돌봄, 교통비, 명절비"></label>
-            <label class="care__field">금액<input type="number" id="care-famount" min="0" step="1000" placeholder="원"></label>
+            <label class="care__field">금액<input type="number" inputmode="numeric" id="care-famount" min="0" step="1000" placeholder="원"></label>
           </div>
 
           <label class="care__field care__field--wide">메모(선택)<input type="text" id="care-note" placeholder="예: 어린이집 하원 후"></label>
@@ -422,7 +426,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/lunar-javascript@1.7.4/lunar.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- xlsx(≈0.9MB)는 [엑셀 백업] 누를 때만 app.js가 동적 로드 (exportExcel/ensureXLSX) -->
+
   <script>
     (function () {
       var v = "?_=" + Date.now();
