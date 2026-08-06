@@ -893,6 +893,300 @@
     toast("엑셀로 저장했어요 ⬇️");
   }
 
+  /* ==========================================================================
+     사례금 계산기 (장인어른·처제 돌봄 기록 → 자동 계산 + 월별 기록)
+     ========================================================================== */
+  const careState = { y: 0, m: 0, tab: "month", rows: [],
+    settings: { rate_day: 10000, rate_evening: 15000, rate_weekend: 20000 } };
+  const CARE_DOW = ["일", "월", "화", "수", "목", "금", "토"];
+  const CARE_EVENING_START = 18 * 60;   // 평일 저녁 요율 경계 = 18:00
+
+  // ----- 순수 계산 로직 -----
+  const careHm2min = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(t || ""); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+  const careIso = (y, m, d) => `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const careDow = (date) => { const [y, mo, da] = date.split("-").map(Number); return new Date(y, mo - 1, da).getDay(); };
+  const careWon = (n) => `${(n || 0).toLocaleString("ko-KR")}원`;
+  const careHours = (min) => (min / 60).toFixed(2).replace(/\.?0+$/, "");
+
+  const careHolidayCache = {};
+  function careHolidaySet(year) {
+    if (careHolidayCache[year]) return careHolidayCache[year];
+    const s = new Set();
+    // 양력 고정 공휴일
+    [[1, 1], [3, 1], [5, 5], [6, 6], [8, 15], [10, 3], [10, 9], [12, 25]]
+      .forEach(([m, d]) => s.add(careIso(year, m, d)));
+    // 음력 공휴일 (설날·추석은 앞뒤 하루 포함, 부처님오신날)
+    const L = window.Lunar;
+    if (L) {
+      const addLunar = (lm, ld, spread) => {
+        try {
+          const so = L.fromYmd(year, lm, ld).getSolar();
+          const base = new Date(so.getYear(), so.getMonth() - 1, so.getDay());
+          for (let k = -spread; k <= spread; k++) {
+            const dd = new Date(base); dd.setDate(base.getDate() + k);
+            s.add(careIso(dd.getFullYear(), dd.getMonth() + 1, dd.getDate()));
+          }
+        } catch (_) {}
+      };
+      addLunar(1, 1, 1);   // 설날 연휴
+      addLunar(8, 15, 1);  // 추석 연휴
+      addLunar(4, 8, 0);   // 부처님오신날
+    }
+    careHolidayCache[year] = s; return s;
+  }
+  const careIsHoliday = (date) => careHolidaySet(+date.slice(0, 4)).has(date);
+
+  // 날짜+시작+종료(분) → 평일풀타임 / 평일저녁 / 주말 분(minutes)으로 분류
+  function careClassify(date, sm, em) {
+    const dow = careDow(date);
+    const weekend = dow === 0 || dow === 6 || careIsHoliday(date);
+    const dur = em - sm; let day = 0, evening = 0, wknd = 0;
+    if (weekend) wknd = dur;
+    else if (em <= CARE_EVENING_START) day = dur;
+    else if (sm >= CARE_EVENING_START) evening = dur;
+    else { day = CARE_EVENING_START - sm; evening = em - CARE_EVENING_START; }
+    return { day, evening, weekend: wknd };
+  }
+  const careAmount = (b, s) =>
+    Math.round((b.day / 60) * s.rate_day + (b.evening / 60) * s.rate_evening + (b.weekend / 60) * s.rate_weekend);
+
+  function careRowBreak(r) {
+    if (!r.start_time || !r.end_time) return null;
+    const s = careHm2min(r.start_time), e = careHm2min(r.end_time);
+    if (s == null || e == null || e <= s) return null;
+    return careClassify(r.work_date, s, e);
+  }
+  function careBreakText(b) {
+    const p = [];
+    if (b.weekend) p.push(`주말·공휴일 ${careHours(b.weekend)}시간`);
+    if (b.day) p.push(`평일 ${careHours(b.day)}시간`);
+    if (b.evening) p.push(`저녁 ${careHours(b.evening)}시간`);
+    return p.join(" + ");
+  }
+
+  // ----- 데이터 로드 -----
+  async function careReload() {
+    const [rowsRes, stRes] = await Promise.all([
+      sb.from("care_sessions").select("*").order("work_date", { ascending: true }),
+      sb.from("care_settings").select("*").eq("id", 1),
+    ]);
+    careState.rows = rowsRes.data || [];
+    const st = stRes.data && stRes.data[0];
+    if (st) careState.settings = { rate_day: st.rate_day, rate_evening: st.rate_evening, rate_weekend: st.rate_weekend };
+  }
+
+  // ----- 열기/닫기/탭 -----
+  async function openCare() {
+    $("#care-modal").hidden = false; document.body.style.overflow = "hidden";
+    if (!careState.y) { const n = new Date(); careState.y = n.getFullYear(); careState.m = n.getMonth() + 1; }
+    careSetTab("month");
+    await careReload();
+    $("#rate-day").value = careState.settings.rate_day;
+    $("#rate-evening").value = careState.settings.rate_evening;
+    $("#rate-weekend").value = careState.settings.rate_weekend;
+    careResetForm(); renderCareMonth();
+  }
+  function closeCare() { $("#care-modal").hidden = true; document.body.style.overflow = ""; }
+  function careSetTab(t) {
+    careState.tab = t;
+    $("#care-tab-month").classList.toggle("is-active", t === "month");
+    $("#care-tab-history").classList.toggle("is-active", t === "history");
+    $("#care-month").hidden = t !== "month";
+    $("#care-history").hidden = t !== "history";
+    if (t === "history") renderCareHistory();
+  }
+  function careShiftMonth(delta) {
+    careState.m += delta;
+    if (careState.m < 1) { careState.m = 12; careState.y--; }
+    if (careState.m > 12) { careState.m = 1; careState.y++; }
+    careResetForm(); renderCareMonth();
+  }
+
+  // ----- 폼 -----
+  function careUpdateKindUI() {
+    const time = $("#care-kind").value === "time";
+    $("#care-time-fields").hidden = !time;
+    $("#care-fixed-fields").hidden = time;
+  }
+  function careResetForm() {
+    $("#care-edit-id").value = "";
+    const n = new Date();
+    const inThisMonth = n.getFullYear() === careState.y && n.getMonth() + 1 === careState.m;
+    const lastDay = new Date(careState.y, careState.m, 0).getDate();
+    $("#care-date").value = careIso(careState.y, careState.m, inThisMonth ? n.getDate() : 1);
+    $("#care-date").min = careIso(careState.y, careState.m, 1);
+    $("#care-date").max = careIso(careState.y, careState.m, lastDay);
+    $("#care-start").value = ""; $("#care-end").value = "";
+    $("#care-flabel").value = ""; $("#care-famount").value = ""; $("#care-note").value = "";
+    $("#care-add").textContent = "추가"; $("#care-cancel").hidden = true;
+    careUpdateKindUI(); carePreview();
+  }
+  function carePreview() {
+    const el = $("#care-preview");
+    if ($("#care-kind").value !== "time") {
+      const amt = Math.round(+$("#care-famount").value || 0);
+      el.textContent = amt ? `기타 항목 → ${careWon(amt)}` : ""; return;
+    }
+    const date = $("#care-date").value, sm = careHm2min($("#care-start").value), em = careHm2min($("#care-end").value);
+    if (!date || sm == null || em == null) { el.textContent = ""; return; }
+    if (em <= sm) { el.textContent = "⚠️ 종료 시각이 시작보다 빨라요."; return; }
+    const [, mo, da] = date.split("-");
+    const wk = careDow(date) === 0 || careDow(date) === 6 || careIsHoliday(date);
+    const b = careClassify(date, sm, em);
+    el.textContent = `${+mo}/${+da}(${CARE_DOW[careDow(date)]})${wk ? " 주말·공휴일" : ""} · ${careBreakText(b)} → ${careWon(careAmount(b, careState.settings))}`;
+  }
+  async function careSubmit(e) {
+    e.preventDefault();
+    const id = $("#care-edit-id").value;
+    const who = $("#care-who").value;
+    const kind = $("#care-kind").value;
+    const date = $("#care-date").value;
+    if (!date) { toast("날짜를 입력해 주세요."); return; }
+    let payload;
+    if (kind === "time") {
+      const st = $("#care-start").value, en = $("#care-end").value;
+      const sm = careHm2min(st), em = careHm2min(en);
+      if (sm == null || em == null) { toast("시작·종료 시각을 입력해 주세요."); return; }
+      if (em <= sm) { toast("종료가 시작보다 빨라요. 자정을 넘기면 두 줄로 나눠 입력해 주세요."); return; }
+      const amt = careAmount(careClassify(date, sm, em), careState.settings);
+      payload = { caregiver: who, work_date: date, start_time: st, end_time: en, fixed_label: "", fixed_amount: null, amount: amt, note: $("#care-note").value.trim() };
+    } else {
+      const lbl = $("#care-flabel").value.trim();
+      const amt = Math.round(+$("#care-famount").value || 0);
+      if (!lbl) { toast("항목 이름을 입력해 주세요."); return; }
+      if (!amt) { toast("금액을 입력해 주세요."); return; }
+      payload = { caregiver: who, work_date: date, start_time: null, end_time: null, fixed_label: lbl, fixed_amount: amt, amount: amt, note: $("#care-note").value.trim() };
+    }
+    const q = id ? sb.from("care_sessions").update(payload).eq("id", id) : sb.from("care_sessions").insert(payload);
+    const { error } = await q;
+    if (error) { console.error(error); toast("저장하지 못했어요. 잠시 후 다시 시도해 주세요."); return; }
+    toast(id ? "수정했어요 ✅" : "추가했어요 ✅");
+    careResetForm(); await careReload(); renderCareMonth();
+  }
+  function careEdit(r) {
+    $("#care-edit-id").value = r.id;
+    $("#care-who").value = r.caregiver;
+    $("#care-date").value = r.work_date;
+    if (r.start_time && r.end_time) {
+      $("#care-kind").value = "time"; $("#care-start").value = r.start_time; $("#care-end").value = r.end_time;
+    } else {
+      $("#care-kind").value = "fixed"; $("#care-flabel").value = r.fixed_label || ""; $("#care-famount").value = r.fixed_amount || "";
+    }
+    $("#care-note").value = r.note || "";
+    $("#care-add").textContent = "수정 저장"; $("#care-cancel").hidden = false;
+    careUpdateKindUI(); carePreview();
+    $("#care-form").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+  async function careDelete(r) {
+    if (!confirm("이 기록을 삭제할까요?")) return;
+    const { error } = await sb.from("care_sessions").delete().eq("id", r.id);
+    if (error) { console.error(error); toast("삭제하지 못했어요."); return; }
+    toast("삭제했어요 🗑️"); await careReload(); renderCareMonth();
+  }
+  async function careSaveRates() {
+    const p = { id: 1,
+      rate_day: Math.round(+$("#rate-day").value || 0),
+      rate_evening: Math.round(+$("#rate-evening").value || 0),
+      rate_weekend: Math.round(+$("#rate-weekend").value || 0) };
+    const { error } = await sb.from("care_settings").upsert(p);
+    if (error) { console.error(error); toast("시급을 저장하지 못했어요."); return; }
+    careState.settings = { rate_day: p.rate_day, rate_evening: p.rate_evening, rate_weekend: p.rate_weekend };
+    toast("시급을 저장했어요. (기존 기록 금액은 그대로 유지)"); carePreview();
+  }
+
+  // ----- 렌더 -----
+  const careMonthRows = () => {
+    const pre = `${careState.y}-${String(careState.m).padStart(2, "0")}`;
+    return careState.rows.filter((r) => (r.work_date || "").startsWith(pre));
+  };
+  function renderCareMonth() {
+    $("#care-month-label").textContent = `${careState.y}년 ${careState.m}월`;
+    renderCareList(); renderCareSummary();
+  }
+  function renderCareList() {
+    const ul = $("#care-list"); ul.innerHTML = "";
+    const rows = careMonthRows().slice().sort((a, b) => (a.work_date < b.work_date ? -1 : a.work_date > b.work_date ? 1 : 0));
+    if (!rows.length) { ul.innerHTML = `<li class="care-empty">이번 달 기록이 없어요. 위에서 추가해 보세요.</li>`; return; }
+    for (const r of rows) {
+      const li = document.createElement("li"); li.className = "care-item";
+      const isS = r.caregiver === "처제";
+      let detail;
+      if (r.start_time && r.end_time) {
+        const b = careRowBreak(r);
+        detail = `${r.start_time}~${r.end_time} · ${b ? careBreakText(b) : ""}`;
+      } else {
+        detail = `기타 · ${esc(r.fixed_label || "")}`;
+      }
+      if (r.note) detail += ` · ${esc(r.note)}`;
+      const [, mo, da] = r.work_date.split("-");
+      li.innerHTML =
+        `<span class="care-item__who care-item__who--${isS ? "s" : "f"}">${esc(r.caregiver)}</span>` +
+        `<div class="care-item__main"><div class="care-item__date">${+mo}/${+da} (${CARE_DOW[careDow(r.work_date)]})</div>` +
+        `<div class="care-item__detail">${detail}</div></div>` +
+        `<span class="care-item__amt">${careWon(r.amount)}</span>` +
+        `<span class="care-item__btns"><button type="button" data-edit aria-label="수정">✏️</button>` +
+        `<button type="button" data-del aria-label="삭제">🗑️</button></span>`;
+      li.querySelector("[data-edit]").onclick = () => careEdit(r);
+      li.querySelector("[data-del]").onclick = () => careDelete(r);
+      ul.appendChild(li);
+    }
+  }
+  function renderCareSummary() {
+    const rows = careMonthRows(); const box = $("#care-summary");
+    if (!rows.length) { box.innerHTML = ""; return; }
+    const agg = {};
+    for (const r of rows) {
+      const g = agg[r.caregiver] || (agg[r.caregiver] = { day: 0, evening: 0, weekend: 0, fixed: 0, amount: 0 });
+      g.amount += r.amount || 0;
+      const b = careRowBreak(r);
+      if (b) { g.day += b.day; g.evening += b.evening; g.weekend += b.weekend; }
+      else g.fixed += r.amount || 0;
+    }
+    let total = 0, html = `<h4>${careState.m}월 합계</h4>`;
+    for (const who of ["장인어른", "처제"]) {
+      const g = agg[who]; if (!g) continue; total += g.amount;
+      const parts = [];
+      if (g.day) parts.push(`평일 ${careHours(g.day)}h`);
+      if (g.evening) parts.push(`저녁 ${careHours(g.evening)}h`);
+      if (g.weekend) parts.push(`주말 ${careHours(g.weekend)}h`);
+      if (g.fixed) parts.push(`기타 ${careWon(g.fixed)}`);
+      html += `<div class="care-sum__row"><span><b>${who}</b> <span class="care-sum__hours">${parts.join(" · ") || "—"}</span></span><span>${careWon(g.amount)}</span></div>`;
+    }
+    html += `<div class="care-sum__total"><span>이번 달 총 사례금</span><span>${careWon(total)}</span></div>`;
+    box.innerHTML = html;
+  }
+  function renderCareHistory() {
+    const byMon = {};
+    for (const r of careState.rows) {
+      const key = (r.work_date || "").slice(0, 7); if (!key) continue;
+      const m = byMon[key] || (byMon[key] = {});
+      const g = m[r.caregiver] || (m[r.caregiver] = { min: 0, amt: 0 });
+      g.amt += r.amount || 0;
+      const b = careRowBreak(r); if (b) g.min += b.day + b.evening + b.weekend;
+    }
+    const keys = Object.keys(byMon).sort().reverse();
+    const body = $("#care-history-body");
+    if (!keys.length) { body.innerHTML = `<p class="care-empty">아직 기록이 없어요.</p>`; return; }
+    let gjm = 0, gja = 0, gcm = 0, gca = 0, rowsHtml = "";
+    for (const k of keys) {
+      const [y, mo] = k.split("-"); const g = byMon[k];
+      const j = g["장인어른"] || { min: 0, amt: 0 }, c = g["처제"] || { min: 0, amt: 0 };
+      gjm += j.min; gja += j.amt; gcm += c.min; gca += c.amt;
+      rowsHtml += `<tr><td class="care-hist__mon" data-y="${+y}" data-m="${+mo}">${+y}.${+mo}</td>` +
+        `<td>${j.min ? careHours(j.min) + "h" : "—"}</td><td>${j.amt ? careWon(j.amt) : "—"}</td>` +
+        `<td>${c.min ? careHours(c.min) + "h" : "—"}</td><td>${c.amt ? careWon(c.amt) : "—"}</td>` +
+        `<td>${careWon(j.amt + c.amt)}</td></tr>`;
+    }
+    body.innerHTML = `<table class="care-hist__table"><thead><tr>` +
+      `<th>월</th><th>장인어른</th><th>사례금</th><th>처제</th><th>사례금</th><th>합계</th></tr></thead>` +
+      `<tbody>${rowsHtml}</tbody><tfoot><tr class="care-hist__grand"><td>전체</td>` +
+      `<td>${careHours(gjm)}h</td><td>${careWon(gja)}</td><td>${careHours(gcm)}h</td><td>${careWon(gca)}</td>` +
+      `<td>${careWon(gja + gca)}</td></tr></tfoot></table>`;
+    body.querySelectorAll(".care-hist__mon").forEach((td) => {
+      td.onclick = () => { careState.y = +td.dataset.y; careState.m = +td.dataset.m; careSetTab("month"); careResetForm(); renderCareMonth(); };
+    });
+  }
+
   /* ---------- 데이터 로드 ---------- */
   async function reload() {
     const { data, error } = await sb.from("events").select("*").order("date", { ascending: false });
@@ -921,6 +1215,7 @@
     });
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      if (!$("#care-modal").hidden) { closeCare(); return; }
       if (!$("#crop-modal").hidden) closeCrop();
       else if (!$("#lightbox").hidden) closeLightbox();
       else if (!$("#sched-modal").hidden) closeSchedule();
@@ -942,6 +1237,18 @@
     $("#event-form").onsubmit = saveEvent;
     $("#logout-btn").onclick = async () => { await sb.auth.signOut(); location.reload(); };
     $("#export-btn").onclick = exportExcel;
+    // 사례금 계산기
+    $("#care-btn").onclick = openCare;
+    $("#care-close").onclick = closeCare;
+    $("#care-tab-month").onclick = () => careSetTab("month");
+    $("#care-tab-history").onclick = () => careSetTab("history");
+    $("#care-prev").onclick = () => careShiftMonth(-1);
+    $("#care-next").onclick = () => careShiftMonth(1);
+    $("#care-kind").onchange = () => { careUpdateKindUI(); carePreview(); };
+    ["#care-date", "#care-start", "#care-end", "#care-famount"].forEach((sel) => $(sel).addEventListener("input", carePreview));
+    $("#care-form").onsubmit = careSubmit;
+    $("#care-cancel").onclick = careResetForm;
+    $("#care-rate-save").onclick = careSaveRates;
     // 뷰 전환 + 캘린더 + 기념일
     $("#tab-timeline").onclick = () => setView("timeline");
     $("#tab-calendar").onclick = () => setView("calendar");

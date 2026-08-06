@@ -460,6 +460,63 @@ textarea.eform__input { resize: vertical; }
   font-size: 14px; box-shadow: var(--shadow-lg);
 }
 
+/* ---------- 사례금 계산기 ---------- */
+.care { position: fixed; inset: 0; z-index: 85; background: var(--bg); background-image: var(--sky); overflow-y: auto; }
+.care__wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 16px 80px; }
+.care__top { display: flex; align-items: center; justify-content: space-between; padding: 20px 0 12px; position: sticky; top: 0; background: var(--bg); z-index: 3; }
+.care__title { font-size: 20px; margin: 0; }
+.care__top .modal__close { position: static; }
+.care__tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+.care__panel { display: block; }
+.care__nav { display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 12px; }
+.care__nav h3 { font-size: 18px; margin: 0; min-width: 130px; text-align: center; }
+.care__nav button { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); font-size: 20px; color: var(--text); }
+.care__nav button:hover { border-color: var(--accent-2); }
+
+.care__settings { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 10px 14px; margin-bottom: 14px; }
+.care__settings summary { cursor: pointer; font-weight: 700; font-size: 14px; }
+.care__rates { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; margin-top: 12px; }
+.care__rates label { display: flex; flex-direction: column; font-size: 12px; color: var(--text-soft); gap: 4px; }
+.care__rates input { width: 100px; padding: 8px 10px; font-size: 15px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
+.care__hint { font-size: 12px; color: var(--text-soft); margin: 10px 0 0; line-height: 1.5; }
+
+.care__form { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 14px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.care__frow { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+.care__frow--btns { margin-bottom: 0; }
+.care__field { display: flex; flex-direction: column; font-size: 12px; color: var(--text-soft); gap: 4px; flex: 1; min-width: 90px; }
+.care__field--wide { flex-basis: 100%; }
+.care__field select, .care__field input { padding: 9px 11px; font-size: 15px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font-family: inherit; }
+.care__field select:focus, .care__field input:focus { outline: 2px solid var(--accent-2); border-color: transparent; }
+.care__preview { font-size: 13.5px; color: var(--accent2-ink); background: color-mix(in srgb, var(--accent-2) 12%, var(--surface)); border-radius: 8px; padding: 8px 12px; margin: 4px 0 12px; min-height: 20px; line-height: 1.5; }
+.care__preview:empty { display: none; }
+
+.care__list { list-style: none; padding: 0; margin: 0 0 18px; display: flex; flex-direction: column; gap: 8px; }
+.care-item { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 10px 12px; }
+.care-item__who { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; flex: 0 0 auto; }
+.care-item__who--f { background: color-mix(in srgb, var(--accent-2) 22%, var(--surface)); color: var(--accent2-ink); }
+.care-item__who--s { background: color-mix(in srgb, #e79ab0 24%, var(--surface)); color: #a04a68; }
+.care-item__main { flex: 1; min-width: 0; }
+.care-item__date { font-size: 13px; font-weight: 700; color: var(--text); }
+.care-item__detail { font-size: 12px; color: var(--text-soft); margin-top: 2px; }
+.care-item__amt { font-size: 15px; font-weight: 800; color: var(--text); white-space: nowrap; }
+.care-item__btns { display: flex; gap: 4px; flex: 0 0 auto; }
+.care-item__btns button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); font-size: 13px; }
+.care-empty { text-align: center; color: var(--text-soft); font-size: 14px; padding: 20px 0; }
+
+.care__summary { border: 2px solid var(--accent); border-radius: 14px; background: var(--surface-2); padding: 14px 16px; }
+.care__summary h4 { margin: 0 0 10px; font-size: 15px; }
+.care-sum__row { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+.care-sum__row:last-of-type { border-bottom: none; }
+.care-sum__hours { font-size: 12px; color: var(--text-soft); }
+.care-sum__total { display: flex; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 2px solid var(--accent); font-size: 17px; font-weight: 800; }
+
+.care-hist__table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.care-hist__table th, .care-hist__table td { padding: 9px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+.care-hist__table th { color: var(--text-soft); font-weight: 700; font-size: 12px; }
+.care-hist__table td:first-child, .care-hist__table th:first-child { text-align: left; font-weight: 700; }
+.care-hist__mon { cursor: pointer; color: var(--accent2-ink); text-decoration: underline; }
+.care-hist__grand td { border-top: 2px solid var(--accent); font-weight: 800; border-bottom: none; }
+
 /* ---------- 모션 저감 ---------- */
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

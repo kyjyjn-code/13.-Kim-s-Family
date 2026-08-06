@@ -31,6 +31,7 @@
           <div>예수님과 함께 행복한 하루 되세요~</div>
         </div>
         <div class="topbar__btns">
+          <button id="care-btn" class="logout-btn" type="button">🧮 사례금 계산기</button>
           <button id="export-btn" class="logout-btn" type="button">⬇️ 엑셀 백업</button>
           <button id="logout-btn" class="logout-btn" type="button">🔓 로그아웃</button>
         </div>
@@ -292,6 +293,89 @@
   <div id="lightbox" class="lightbox" hidden>
     <button class="lightbox__close" type="button" data-lightbox-close aria-label="닫기">✕</button>
     <img id="lightbox-img" class="lightbox__img" alt="" />
+  </div>
+
+  <!-- 사례금 계산기 -->
+  <div id="care-modal" class="care" hidden>
+    <div class="care__wrap">
+      <header class="care__top">
+        <h2 class="care__title">🧮 장인어른 사례금 계산기</h2>
+        <button id="care-close" class="modal__close" type="button" aria-label="닫기">✕</button>
+      </header>
+
+      <div class="care__tabs">
+        <button id="care-tab-month" class="viewtab is-active" type="button">📅 월별 입력·계산</button>
+        <button id="care-tab-history" class="viewtab" type="button">📊 전체 기록</button>
+      </div>
+
+      <!-- 월별 입력·계산 -->
+      <section id="care-month" class="care__panel">
+        <div class="care__nav">
+          <button id="care-prev" type="button" aria-label="이전 달">‹</button>
+          <h3 id="care-month-label">—</h3>
+          <button id="care-next" type="button" aria-label="다음 달">›</button>
+        </div>
+
+        <details id="care-settings" class="care__settings">
+          <summary>⚙️ 시급 설정</summary>
+          <div class="care__rates">
+            <label>평일 오전·오후<input type="number" id="rate-day" min="0" step="500"> 원/시간</label>
+            <label>평일 저녁(18시~)<input type="number" id="rate-evening" min="0" step="500"> 원/시간</label>
+            <label>주말·공휴일<input type="number" id="rate-weekend" min="0" step="500"> 원/시간</label>
+            <button id="care-rate-save" type="button" class="btn">시급 저장</button>
+          </div>
+          <p class="care__hint">주말 = 토·일·공휴일(설·추석·부처님오신날 등 자동). 평일은 18:00을 경계로 오전·오후 / 저녁이 자동 분할됩니다.</p>
+        </details>
+
+        <form id="care-form" class="care__form" autocomplete="off">
+          <input type="hidden" id="care-edit-id" value="">
+          <div class="care__frow">
+            <label class="care__field">돌봄
+              <select id="care-who">
+                <option value="장인어른">장인어른</option>
+                <option value="처제">처제</option>
+              </select>
+            </label>
+            <label class="care__field">유형
+              <select id="care-kind">
+                <option value="time">시간 기록</option>
+                <option value="fixed">기타 항목</option>
+              </select>
+            </label>
+            <label class="care__field">날짜
+              <input type="date" id="care-date" required>
+            </label>
+          </div>
+
+          <div class="care__frow" id="care-time-fields">
+            <label class="care__field">시작<input type="time" id="care-start"></label>
+            <label class="care__field">종료<input type="time" id="care-end"></label>
+          </div>
+
+          <div class="care__frow" id="care-fixed-fields" hidden>
+            <label class="care__field care__field--wide">항목 이름<input type="text" id="care-flabel" placeholder="예: 로이돌봄, 교통비, 명절비"></label>
+            <label class="care__field">금액<input type="number" id="care-famount" min="0" step="1000" placeholder="원"></label>
+          </div>
+
+          <label class="care__field care__field--wide">메모(선택)<input type="text" id="care-note" placeholder="예: 어린이집 하원 후"></label>
+
+          <div id="care-preview" class="care__preview" aria-live="polite"></div>
+
+          <div class="care__frow care__frow--btns">
+            <button type="submit" id="care-add" class="btn btn--primary">추가</button>
+            <button type="button" id="care-cancel" class="btn" hidden>취소</button>
+          </div>
+        </form>
+
+        <ul id="care-list" class="care__list"></ul>
+        <div id="care-summary" class="care__summary"></div>
+      </section>
+
+      <!-- 전체 기록 -->
+      <section id="care-history" class="care__panel" hidden>
+        <div id="care-history-body"></div>
+      </section>
+    </div>
   </div>
 
   <div id="toast" class="toast" hidden role="status" aria-live="polite"></div>
