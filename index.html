@@ -305,6 +305,7 @@
 
       <div class="care__tabs">
         <button id="care-tab-month" class="viewtab is-active" type="button">📅 월별 입력·계산</button>
+        <button id="care-tab-range" class="viewtab" type="button">📆 기간 정산</button>
         <button id="care-tab-history" class="viewtab" type="button">📊 전체 기록</button>
       </div>
 
@@ -369,6 +370,17 @@
 
         <ul id="care-list" class="care__list"></ul>
         <div id="care-summary" class="care__summary"></div>
+      </section>
+
+      <!-- 기간 정산 -->
+      <section id="care-range" class="care__panel" hidden>
+        <div class="care__rangebar">
+          <label class="care__field">시작일<input type="date" id="care-range-from"></label>
+          <label class="care__field">종료일<input type="date" id="care-range-to"></label>
+        </div>
+        <p class="care__hint" style="margin:0 0 14px">예: 7월 25일 ~ 8월 15일처럼 달을 넘겨 정산할 때 쓰세요. 입력은 월별 탭에서 날짜별로 하면 됩니다.</p>
+        <div id="care-range-summary" class="care__summary"></div>
+        <ul id="care-range-list" class="care__list"></ul>
       </section>
 
       <!-- 전체 기록 -->

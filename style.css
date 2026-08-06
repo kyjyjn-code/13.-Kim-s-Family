@@ -510,6 +510,9 @@ textarea.eform__input { resize: vertical; }
 .care-sum__hours { font-size: 12px; color: var(--text-soft); }
 .care-sum__total { display: flex; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 2px solid var(--accent); font-size: 17px; font-weight: 800; }
 
+.care__rangebar { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
+.care__rangebar .care__field { flex: 1; min-width: 130px; }
+
 .care-hist__table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .care-hist__table th, .care-hist__table td { padding: 9px 8px; border-bottom: 1px solid var(--line); text-align: right; }
 .care-hist__table th { color: var(--text-soft); font-weight: 700; font-size: 12px; }

@@ -990,10 +990,20 @@
   function careSetTab(t) {
     careState.tab = t;
     $("#care-tab-month").classList.toggle("is-active", t === "month");
+    $("#care-tab-range").classList.toggle("is-active", t === "range");
     $("#care-tab-history").classList.toggle("is-active", t === "history");
     $("#care-month").hidden = t !== "month";
+    $("#care-range").hidden = t !== "range";
     $("#care-history").hidden = t !== "history";
     if (t === "history") renderCareHistory();
+    if (t === "range") {
+      if (!$("#care-range-from").value) {
+        const n = new Date();
+        $("#care-range-from").value = careIso(n.getFullYear(), n.getMonth() + 1, 1);
+        $("#care-range-to").value = careIso(n.getFullYear(), n.getMonth() + 1, n.getDate());
+      }
+      renderCareRange();
+    }
   }
   function careShiftMonth(delta) {
     careState.m += delta;
@@ -1103,10 +1113,10 @@
     $("#care-month-label").textContent = `${careState.y}년 ${careState.m}월`;
     renderCareList(); renderCareSummary();
   }
-  function renderCareList() {
-    const ul = $("#care-list"); ul.innerHTML = "";
-    const rows = careMonthRows().slice().sort((a, b) => (a.work_date < b.work_date ? -1 : a.work_date > b.work_date ? 1 : 0));
-    if (!rows.length) { ul.innerHTML = `<li class="care-empty">이번 달 기록이 없어요. 위에서 추가해 보세요.</li>`; return; }
+  // 기록 목록을 ul에 그린다 (withBtns=true면 수정/삭제 버튼 포함 — 월별 탭 전용)
+  function careRenderList(ul, rows, withBtns, emptyMsg) {
+    ul.innerHTML = "";
+    if (!rows.length) { ul.innerHTML = `<li class="care-empty">${emptyMsg || "기록이 없어요."}</li>`; return; }
     for (const r of rows) {
       const li = document.createElement("li"); li.className = "care-item";
       const isS = r.caregiver === "처제";
@@ -1124,16 +1134,20 @@
         `<div class="care-item__main"><div class="care-item__date">${+mo}/${+da} (${CARE_DOW[careDow(r.work_date)]})</div>` +
         `<div class="care-item__detail">${detail}</div></div>` +
         `<span class="care-item__amt">${careWon(r.amount)}</span>` +
-        `<span class="care-item__btns"><button type="button" data-edit aria-label="수정">✏️</button>` +
-        `<button type="button" data-del aria-label="삭제">🗑️</button></span>`;
-      li.querySelector("[data-edit]").onclick = () => careEdit(r);
-      li.querySelector("[data-del]").onclick = () => careDelete(r);
+        (withBtns
+          ? `<span class="care-item__btns"><button type="button" data-edit aria-label="수정">✏️</button>` +
+            `<button type="button" data-del aria-label="삭제">🗑️</button></span>`
+          : "");
+      if (withBtns) {
+        li.querySelector("[data-edit]").onclick = () => careEdit(r);
+        li.querySelector("[data-del]").onclick = () => careDelete(r);
+      }
       ul.appendChild(li);
     }
   }
-  function renderCareSummary() {
-    const rows = careMonthRows(); const box = $("#care-summary");
-    if (!rows.length) { box.innerHTML = ""; return; }
+  // 돌봄별 시간·사례금 집계 요약 HTML (월별·기간 공용)
+  function careAggHtml(rows, title) {
+    if (!rows.length) return "";
     const agg = {};
     for (const r of rows) {
       const g = agg[r.caregiver] || (agg[r.caregiver] = { day: 0, evening: 0, weekend: 0, fixed: 0, amount: 0 });
@@ -1142,7 +1156,7 @@
       if (b) { g.day += b.day; g.evening += b.evening; g.weekend += b.weekend; }
       else g.fixed += r.amount || 0;
     }
-    let total = 0, html = `<h4>${careState.m}월 합계</h4>`;
+    let total = 0, html = `<h4>${title}</h4>`;
     for (const who of ["장인어른", "처제"]) {
       const g = agg[who]; if (!g) continue; total += g.amount;
       const parts = [];
@@ -1152,8 +1166,29 @@
       if (g.fixed) parts.push(`기타 ${careWon(g.fixed)}`);
       html += `<div class="care-sum__row"><span><b>${who}</b> <span class="care-sum__hours">${parts.join(" · ") || "—"}</span></span><span>${careWon(g.amount)}</span></div>`;
     }
-    html += `<div class="care-sum__total"><span>이번 달 총 사례금</span><span>${careWon(total)}</span></div>`;
-    box.innerHTML = html;
+    html += `<div class="care-sum__total"><span>총 사례금</span><span>${careWon(total)}</span></div>`;
+    return html;
+  }
+  function renderCareList() {
+    const rows = careMonthRows().slice().sort((a, b) => (a.work_date < b.work_date ? -1 : a.work_date > b.work_date ? 1 : 0));
+    careRenderList($("#care-list"), rows, true, "이번 달 기록이 없어요. 위에서 추가해 보세요.");
+  }
+  function renderCareSummary() {
+    $("#care-summary").innerHTML = careAggHtml(careMonthRows(), `${careState.m}월 합계`);
+  }
+  function renderCareRange() {
+    const from = $("#care-range-from").value, to = $("#care-range-to").value;
+    const sum = $("#care-range-summary"), ul = $("#care-range-list");
+    if (!from || !to) { sum.innerHTML = `<p class="care-empty" style="border:none">기간을 선택해 주세요.</p>`; ul.innerHTML = ""; return; }
+    if (from > to) { sum.innerHTML = `<p class="care-empty" style="border:none">⚠️ 종료일이 시작일보다 빨라요.</p>`; ul.innerHTML = ""; return; }
+    const rows = careState.rows
+      .filter((r) => { const d = r.work_date || ""; return d >= from && d <= to; })
+      .sort((a, b) => (a.work_date < b.work_date ? -1 : a.work_date > b.work_date ? 1 : 0));
+    if (!rows.length) { sum.innerHTML = `<p class="care-empty" style="border:none">이 기간엔 기록이 없어요.</p>`; ul.innerHTML = ""; return; }
+    const f = from.split("-"), t = to.split("-");
+    const title = `${+f[0]}.${+f[1]}.${+f[2]} ~ ${+t[0]}.${+t[1]}.${+t[2]}`;
+    sum.innerHTML = careAggHtml(rows, title);
+    careRenderList(ul, rows, false);
   }
   function renderCareHistory() {
     const byMon = {};
@@ -1241,7 +1276,10 @@
     $("#care-btn").onclick = openCare;
     $("#care-close").onclick = closeCare;
     $("#care-tab-month").onclick = () => careSetTab("month");
+    $("#care-tab-range").onclick = () => careSetTab("range");
     $("#care-tab-history").onclick = () => careSetTab("history");
+    $("#care-range-from").addEventListener("input", renderCareRange);
+    $("#care-range-to").addEventListener("input", renderCareRange);
     $("#care-prev").onclick = () => careShiftMonth(-1);
     $("#care-next").onclick = () => careShiftMonth(1);
     $("#care-kind").onchange = () => { careUpdateKindUI(); carePreview(); };
