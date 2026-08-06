@@ -1009,7 +1009,7 @@
     careState.m += delta;
     if (careState.m < 1) { careState.m = 12; careState.y--; }
     if (careState.m > 12) { careState.m = 1; careState.y++; }
-    careResetForm(); renderCareMonth();
+    renderCareMonth();
   }
 
   // ----- 폼 -----
@@ -1020,12 +1020,6 @@
   }
   function careResetForm() {
     $("#care-edit-id").value = "";
-    const n = new Date();
-    const inThisMonth = n.getFullYear() === careState.y && n.getMonth() + 1 === careState.m;
-    const lastDay = new Date(careState.y, careState.m, 0).getDate();
-    $("#care-date").value = careIso(careState.y, careState.m, inThisMonth ? n.getDate() : 1);
-    $("#care-date").min = careIso(careState.y, careState.m, 1);
-    $("#care-date").max = careIso(careState.y, careState.m, lastDay);
     $("#care-start").value = ""; $("#care-end").value = "";
     $("#care-flabel").value = ""; $("#care-famount").value = ""; $("#care-note").value = "";
     $("#care-add").textContent = "추가"; $("#care-cancel").hidden = true;
@@ -1037,21 +1031,19 @@
       const amt = Math.round(+$("#care-famount").value || 0);
       el.textContent = amt ? `기타 항목 → ${careWon(amt)}` : ""; return;
     }
-    const date = $("#care-date").value, sm = careHm2min($("#care-start").value), em = careHm2min($("#care-end").value);
+    const date = careState.selDate, sm = careHm2min($("#care-start").value), em = careHm2min($("#care-end").value);
     if (!date || sm == null || em == null) { el.textContent = ""; return; }
     if (em <= sm) { el.textContent = "⚠️ 종료 시각이 시작보다 빨라요."; return; }
-    const [, mo, da] = date.split("-");
-    const wk = careDow(date) === 0 || careDow(date) === 6 || careIsHoliday(date);
     const b = careClassify(date, sm, em);
-    el.textContent = `${+mo}/${+da}(${CARE_DOW[careDow(date)]})${wk ? " 주말·공휴일" : ""} · ${careBreakText(b)} → ${careWon(careAmount(b, careState.settings))}`;
+    el.textContent = `${careBreakText(b)} → ${careWon(careAmount(b, careState.settings))}`;
   }
   async function careSubmit(e) {
     e.preventDefault();
     const id = $("#care-edit-id").value;
     const who = $("#care-who").value;
     const kind = $("#care-kind").value;
-    const date = $("#care-date").value;
-    if (!date) { toast("날짜를 입력해 주세요."); return; }
+    const date = careState.selDate;
+    if (!date) { toast("날짜를 먼저 선택해 주세요."); return; }
     let payload;
     if (kind === "time") {
       const st = $("#care-start").value, en = $("#care-end").value;
@@ -1071,12 +1063,11 @@
     const { error } = await q;
     if (error) { console.error(error); toast("저장하지 못했어요. 잠시 후 다시 시도해 주세요."); return; }
     toast(id ? "수정했어요 ✅" : "추가했어요 ✅");
-    careResetForm(); await careReload(); renderCareMonth();
+    careResetForm(); await careReload(); renderCareDayList(); renderCareMonth();
   }
   function careEdit(r) {
     $("#care-edit-id").value = r.id;
     $("#care-who").value = r.caregiver;
-    $("#care-date").value = r.work_date;
     if (r.start_time && r.end_time) {
       $("#care-kind").value = "time"; $("#care-start").value = r.start_time; $("#care-end").value = r.end_time;
     } else {
@@ -1091,7 +1082,7 @@
     if (!confirm("이 기록을 삭제할까요?")) return;
     const { error } = await sb.from("care_sessions").delete().eq("id", r.id);
     if (error) { console.error(error); toast("삭제하지 못했어요."); return; }
-    toast("삭제했어요 🗑️"); await careReload(); renderCareMonth();
+    toast("삭제했어요 🗑️"); await careReload(); renderCareDayList(); renderCareMonth();
   }
   async function careSaveRates() {
     const p = { id: 1,
@@ -1111,7 +1102,57 @@
   };
   function renderCareMonth() {
     $("#care-month-label").textContent = `${careState.y}년 ${careState.m}월`;
-    renderCareList(); renderCareSummary();
+    renderCareCal(); renderCareSummary();
+  }
+  const careTodayStr = () => { const n = new Date(); return careIso(n.getFullYear(), n.getMonth() + 1, n.getDate()); };
+  const careCellAmt = (t) => (t >= 10000 ? `${+(t / 10000).toFixed(1)}만` : `${t}`);
+  const careDayRows = (date) => careState.rows.filter((r) => r.work_date === date);
+
+  // 달력 렌더 (날짜 칸 클릭 → 하루 입력 모달)
+  function renderCareCal() {
+    const y = careState.y, m = careState.m;
+    const first = new Date(y, m - 1, 1).getDay();
+    const days = new Date(y, m, 0).getDate();
+    const byDay = {};
+    for (const r of careMonthRows()) { const d = +r.work_date.split("-")[2]; (byDay[d] || (byDay[d] = [])).push(r); }
+    const today = careTodayStr();
+    let html = `<div class="cal__grid">`;
+    ["일", "월", "화", "수", "목", "금", "토"].forEach((w, i) => {
+      const c = i === 0 ? ' style="color:#d06b6b"' : i === 6 ? ' style="color:var(--accent2-ink)"' : "";
+      html += `<div class="cal__dow"${c}>${w}</div>`;
+    });
+    for (let i = 0; i < first; i++) html += `<div class="cal__cell cal__cell--empty"></div>`;
+    for (let d = 1; d <= days; d++) {
+      const ds = careIso(y, m, d), rows = byDay[d] || [];
+      const total = rows.reduce((s, r) => s + (r.amount || 0), 0);
+      const wk = careDow(ds) === 0 || careDow(ds) === 6 || careIsHoliday(ds);
+      const hasF = rows.some((r) => r.caregiver === "장인어른"), hasS = rows.some((r) => r.caregiver === "처제");
+      html += `<button type="button" class="cal__cell care-cell${ds === today ? " cal__cell--today" : ""}" data-date="${ds}">` +
+        `<span class="cal__num"${wk ? ' style="color:#d06b6b"' : ""}>${d}</span>` +
+        (total ? `<span class="care-cell__amt">${careCellAmt(total)}</span>` : "") +
+        (hasF || hasS ? `<span class="care-cell__who">${hasF ? '<i class="dot dot--f"></i>' : ""}${hasS ? '<i class="dot dot--s"></i>' : ""}</span>` : "") +
+        `</button>`;
+    }
+    html += `</div>`;
+    const el = $("#care-cal"); el.innerHTML = html;
+    el.querySelectorAll(".care-cell").forEach((c) => (c.onclick = () => openCareDay(c.dataset.date)));
+  }
+
+  // 하루 입력 모달
+  function openCareDay(date) {
+    careState.selDate = date;
+    const wk = careDow(date) === 0 || careDow(date) === 6 || careIsHoliday(date);
+    const [, mo, da] = date.split("-");
+    $("#care-day-title").textContent = `${+mo}월 ${+da}일 (${CARE_DOW[careDow(date)]})${wk ? " · 주말·공휴일" : ""}`;
+    $("#care-who").value = "장인어른"; $("#care-kind").value = "time";
+    careResetForm(); renderCareDayList();
+    $("#care-day-modal").hidden = false;
+  }
+  function closeCareDay() { $("#care-day-modal").hidden = true; }
+  function renderCareDayList() {
+    const rows = careDayRows(careState.selDate).slice()
+      .sort((a, b) => ((a.start_time || "99") < (b.start_time || "99") ? -1 : 1));
+    careRenderList($("#care-day-list"), rows, true, "이 날은 아직 기록이 없어요. 아래에서 추가하세요.");
   }
   // 기록 목록을 ul에 그린다 (withBtns=true면 수정/삭제 버튼 포함 — 월별 탭 전용)
   function careRenderList(ul, rows, withBtns, emptyMsg) {
@@ -1168,10 +1209,6 @@
     }
     html += `<div class="care-sum__total"><span>총 사례금</span><span>${careWon(total)}</span></div>`;
     return html;
-  }
-  function renderCareList() {
-    const rows = careMonthRows().slice().sort((a, b) => (a.work_date < b.work_date ? -1 : a.work_date > b.work_date ? 1 : 0));
-    careRenderList($("#care-list"), rows, true, "이번 달 기록이 없어요. 위에서 추가해 보세요.");
   }
   function renderCareSummary() {
     $("#care-summary").innerHTML = careAggHtml(careMonthRows(), `${careState.m}월 합계`);
@@ -1250,6 +1287,7 @@
     });
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      if (!$("#care-day-modal").hidden) { closeCareDay(); return; }
       if (!$("#care-modal").hidden) { closeCare(); return; }
       if (!$("#crop-modal").hidden) closeCrop();
       else if (!$("#lightbox").hidden) closeLightbox();
@@ -1283,10 +1321,11 @@
     $("#care-prev").onclick = () => careShiftMonth(-1);
     $("#care-next").onclick = () => careShiftMonth(1);
     $("#care-kind").onchange = () => { careUpdateKindUI(); carePreview(); };
-    ["#care-date", "#care-start", "#care-end", "#care-famount"].forEach((sel) => $(sel).addEventListener("input", carePreview));
+    ["#care-start", "#care-end", "#care-famount"].forEach((sel) => $(sel).addEventListener("input", carePreview));
     $("#care-form").onsubmit = careSubmit;
     $("#care-cancel").onclick = careResetForm;
     $("#care-rate-save").onclick = careSaveRates;
+    $$("[data-care-day-close]").forEach((el) => (el.onclick = closeCareDay));
     // 뷰 전환 + 캘린더 + 기념일
     $("#tab-timeline").onclick = () => setView("timeline");
     $("#tab-calendar").onclick = () => setView("calendar");
